@@ -1,0 +1,58 @@
+# === Environment ===
+.env
+.env.local
+.env.production
+.env.*.local
+
+# === Java / Maven ===
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+hs_err_pid*
+replay_pid*
+
+# === Node / pnpm ===
+node_modules/
+.next/
+.nuxt/
+dist/
+build/
+out/
+.pnpm-store/
+pnpm-lock.yaml.bak
+
+# === IDE ===
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# === Docker ===
+docker-data/
+postgres-data/
+n8n-data/
+
+# === Logs ===
+*.log
+logs/
+
+# === Test output ===
+coverage/
+.nyc_output/
+surefire-reports/
+
+# === Misc ===
+*.tmp
+*.bak
+*.orig
