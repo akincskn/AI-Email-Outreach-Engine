@@ -1,0 +1,98 @@
+{
+  "name": "error-handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SPRING_API_URL }}/api/v1/analytics/summary",
+        "authentication": "none",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "notify-spring",
+      "name": "Notify Spring Boot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300],
+      "notes": "Spring Boot will log the error. SlackNotificationService handles Slack alerting."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "error-message",
+              "name": "text",
+              "value": "=🚨 N8N Error in workflow: {{ $execution.workflowData.name }}\nNode: {{ $execution.error.node?.name }}\nMessage: {{ $execution.error.message }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "build-slack-message",
+      "name": "Build Slack Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [460, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"text\": \"{{ $json.text }}\"\n}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "send-slack",
+      "name": "Send Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 480]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          { "node": "Notify Spring Boot", "type": "main", "index": 0 },
+          { "node": "Build Slack Message", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Build Slack Message": {
+      "main": [
+        [{ "node": "Send Slack Alert", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["outreach", "error-handling"]
+}

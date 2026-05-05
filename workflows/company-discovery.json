@@ -1,0 +1,168 @@
+{
+  "name": "company-discovery",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 09:00 UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SPRING_API_URL }}/api/v1/discovery-filters/active",
+        "authentication": "none",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-active-filters",
+      "name": "Get Active Filters",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "={{ $json }}",
+        "options": {}
+      },
+      "id": "split-filters",
+      "name": "Split Filters",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SPRING_API_URL }}/api/v1/companies/discover",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "domain",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "name",
+              "value": "={{ $json.name }}"
+            },
+            {
+              "name": "source",
+              "value": "google_maps"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "trigger-discovery",
+      "name": "Trigger Discovery per Filter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300],
+      "notes": "Calls Spring Boot CompanyDiscoveryService.discoverFromFilter via REST. Real impl uses filterId not domain."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SPRING_API_URL }}/agent/extract-emails",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "companyId",
+              "value": "={{ $json.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "extract-emails",
+      "name": "Extract Emails",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SPRING_API_URL }}/agent/analyze",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "companyId",
+              "value": "={{ $('trigger-discovery').item.json.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "analyze-company",
+      "name": "Analyze Company",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Daily 09:00 UTC": {
+      "main": [
+        [{ "node": "Get Active Filters", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Active Filters": {
+      "main": [
+        [{ "node": "Split Filters", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Filters": {
+      "main": [
+        [{ "node": "Trigger Discovery per Filter", "type": "main", "index": 0 }]
+      ]
+    },
+    "Trigger Discovery per Filter": {
+      "main": [
+        [{ "node": "Extract Emails", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Emails": {
+      "main": [
+        [{ "node": "Analyze Company", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "error-handler"
+  },
+  "staticData": null,
+  "tags": ["outreach", "discovery"]
+}

@@ -1,0 +1,165 @@
+{
+  "name": "pipeline-process",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pipeline-process",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: New Company",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "pipeline-process-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SPRING_API_URL }}/agent/extract-emails",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"companyId\": \"{{ $json.body.companyId }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "extract-emails",
+      "name": "Extract Emails",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SPRING_API_URL }}/agent/analyze",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"companyId\": \"{{ $('Webhook: New Company').item.json.body.companyId }}\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "analyze-company",
+      "name": "Analyze Company",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "equals",
+              "value2": "BLACKLISTED"
+            }
+          ]
+        }
+      },
+      "id": "check-blacklisted",
+      "name": "Is Blacklisted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {},
+      "id": "end-blacklisted",
+      "name": "Skip (Blacklisted)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1120, 180]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SPRING_API_URL }}/api/v1/email-accounts/by-company/{{ $('Webhook: New Company').item.json.body.companyId }}",
+        "authentication": "none",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "get-email-accounts",
+      "name": "Get Email Accounts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 420]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "={{ $json }}",
+        "options": {}
+      },
+      "id": "split-accounts",
+      "name": "Split Email Accounts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1340, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SPRING_API_URL }}/agent/write",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"companyId\": \"{{ $('Webhook: New Company').item.json.body.companyId }}\",\n  \"emailAccountId\": \"{{ $json.id }}\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "write-draft",
+      "name": "Write Email Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 420]
+    }
+  ],
+  "connections": {
+    "Webhook: New Company": {
+      "main": [
+        [{ "node": "Extract Emails", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Emails": {
+      "main": [
+        [{ "node": "Analyze Company", "type": "main", "index": 0 }]
+      ]
+    },
+    "Analyze Company": {
+      "main": [
+        [{ "node": "Is Blacklisted?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Blacklisted?": {
+      "main": [
+        [{ "node": "Skip (Blacklisted)", "type": "main", "index": 0 }],
+        [{ "node": "Get Email Accounts", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Email Accounts": {
+      "main": [
+        [{ "node": "Split Email Accounts", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Email Accounts": {
+      "main": [
+        [{ "node": "Write Email Draft", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "error-handler"
+  },
+  "staticData": null,
+  "tags": ["outreach", "pipeline"]
+}
