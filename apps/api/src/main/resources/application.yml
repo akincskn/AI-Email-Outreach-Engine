@@ -1,0 +1,157 @@
+spring:
+  application:
+    name: outreach-api
+
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/outreach}
+    username: ${LOCAL_DB_USER:outreach}
+    password: ${LOCAL_DB_PASSWORD:outreach}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: public
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  mail:
+    host: ${GMAIL_SMTP_HOST:localhost}
+    port: ${GMAIL_SMTP_PORT:1025}
+    username: ${GMAIL_USERNAME:}
+    password: ${GMAIL_APP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+        transport:
+          protocol: smtp
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  security:
+    jwt-secret: ${JWT_SECRET:dev-jwt-secret-change-in-production-32chars}
+    jwt-expiration-ms: 86400000
+    hmac-secret: ${HMAC_SECRET:dev-hmac-secret-change-in-production-32chars}
+    n8n-api-key: ${N8N_WEBHOOK_API_KEY:dev-n8n-api-key}
+
+  sender:
+    physical-address: ${SENDER_PHYSICAL_ADDRESS:Your Address Here}
+    from-name: "Akın Coşkun"
+    from-email: ${GMAIL_USERNAME:test@localhost}
+
+  gmail:
+    imap-host: ${GMAIL_IMAP_HOST:localhost}
+    imap-port: ${GMAIL_IMAP_PORT:993}
+    account-created-at: ${GMAIL_ACCOUNT_CREATED_AT:2026-05-05}
+
+  ai:
+    groq:
+      api-key: ${GROQ_API_KEY:}
+      base-url: https://api.groq.com/openai/v1
+      model: llama-3.3-70b-versatile
+      timeout-seconds: 30
+    gemini:
+      api-key: ${GEMINI_API_KEY:}
+      base-url: https://generativelanguage.googleapis.com/v1beta
+      model: gemini-2.0-flash
+      timeout-seconds: 30
+
+  google-maps:
+    api-key: ${GOOGLE_MAPS_API_KEY:}
+
+  slack:
+    webhook-url: ${SLACK_WEBHOOK_URL:}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      groq:
+        register-health-indicator: true
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 3
+        wait-duration-in-open-state: 30s
+        failure-rate-threshold: 50
+      gemini:
+        register-health-indicator: true
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 3
+        wait-duration-in-open-state: 30s
+        failure-rate-threshold: 50
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  mail:
+    host: ${MAILHOG_SMTP_HOST:localhost}
+    port: ${MAILHOG_SMTP_PORT:1025}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+            required: false
+
+  datasource:
+    url: jdbc:postgresql://${LOCAL_DB_HOST:localhost}:${LOCAL_DB_PORT:5432}/${LOCAL_DB_NAME:outreach}
+    username: ${LOCAL_DB_USER:outreach}
+    password: ${LOCAL_DB_PASSWORD:outreach}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    url: ${DATABASE_URL}
+    username:
+    password:
+    hikari:
+      maximum-pool-size: 5

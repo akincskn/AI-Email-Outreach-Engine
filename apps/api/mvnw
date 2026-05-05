@@ -1,0 +1,9 @@
+#!/bin/sh
+# Maven Wrapper startup shell script
+MAVEN_PROJECTBASEDIR=$(cd "$(dirname "$0")" && pwd)
+JAVA_EXEC="${JAVA_HOME:+$JAVA_HOME/bin/}java"
+
+exec "$JAVA_EXEC" \
+  -classpath "$MAVEN_PROJECTBASEDIR/.mvn/wrapper/maven-wrapper.jar" \
+  "-Dmaven.multiModuleProjectDirectory=$MAVEN_PROJECTBASEDIR" \
+  org.apache.maven.wrapper.MavenWrapperMain "$@"
