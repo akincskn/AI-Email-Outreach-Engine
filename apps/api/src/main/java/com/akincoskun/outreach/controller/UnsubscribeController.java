@@ -20,24 +20,17 @@ public class UnsubscribeController {
     @GetMapping(produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> unsubscribe(@RequestParam String token) {
         try {
-            // Token format: hex(email.nonce.sig) — payload = email address
-            byte[] bytes = java.util.HexFormat.of().parseHex(token);
-            String decoded = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
-            String[] parts = decoded.split("\\.");
-            if (parts.length != 3) {
+            String email = hmacTokenService.extractPayload(token);
+            if (email == null) {
                 return ResponseEntity.badRequest().body(invalidPage());
             }
-            String email = parts[0];
-
             if (!hmacTokenService.verifyToken(token, email)) {
                 log.warn("Invalid unsubscribe token for email: {}", email);
                 return ResponseEntity.badRequest().body(invalidPage());
             }
-
             suppressionService.suppress(email, "unsubscribe", null);
             log.info("Unsubscribed: {}", email);
             return ResponseEntity.ok(successPage(email));
-
         } catch (Exception e) {
             log.warn("Unsubscribe error: {}", e.getMessage());
             return ResponseEntity.badRequest().body(invalidPage());
