@@ -105,6 +105,9 @@ app:
   slack:
     webhook-url: ${SLACK_WEBHOOK_URL:}
 
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
 resilience4j:
   circuitbreaker:
     instances:
