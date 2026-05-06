@@ -108,6 +108,9 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
+  rate-limit:
+    requests-per-minute: ${RATE_LIMIT_RPM:100}
+
 resilience4j:
   circuitbreaker:
     instances:
