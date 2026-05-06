@@ -149,6 +149,10 @@ spring:
     username: ${LOCAL_DB_USER:outreach}
     password: ${LOCAL_DB_PASSWORD:outreach}
 
+app:
+  ai:
+    mock-enabled: true
+
 ---
 spring:
   config:
@@ -157,7 +161,21 @@ spring:
 
   datasource:
     url: ${DATABASE_URL}
-    username:
-    password:
     hikari:
       maximum-pool-size: 5
+
+logging:
+  level:
+    root: WARN
+    com.akincoskun.outreach: INFO
+    org.hibernate.SQL: OFF
+    org.hibernate.type.descriptor.sql: OFF
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

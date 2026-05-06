@@ -1,0 +1,10 @@
+target/
+.mvn/
+*.iml
+*.ipr
+*.iws
+.idea/
+.git/
+.gitignore
+*.md
+src/test/

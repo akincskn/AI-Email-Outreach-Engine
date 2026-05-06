@@ -45,6 +45,7 @@ public class ReplyTrackerService {
 
             for (Message msg : messages) {
                 processReply(msg);
+                msg.setFlag(Flags.Flag.SEEN, true);
             }
             inbox.close(false);
         } catch (Exception e) {

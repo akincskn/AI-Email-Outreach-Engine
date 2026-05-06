@@ -24,7 +24,10 @@ USER appuser
 
 EXPOSE 8080
 
-ENV JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom -XX:+UseZGC -Xms256m -Xmx512m"
+ENV JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom -XX:+UseZGC -XX:MaxRAMPercentage=75.0"
 ENV SPRING_PROFILES_ACTIVE=prod
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD wget -qO- http://localhost:8080/actuator/health || exit 1
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
