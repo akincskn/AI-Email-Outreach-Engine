@@ -1,0 +1,87 @@
+services:
+  # ── Spring Boot API ──────────────────────────────────────────────
+  - type: web
+    name: outreach-api
+    runtime: docker
+    rootDir: apps/api
+    dockerfilePath: Dockerfile
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: outreach-db
+          property: connectionString
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: GMAIL_USERNAME
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: GMAIL_SMTP_HOST
+        value: smtp.gmail.com
+      - key: GMAIL_SMTP_PORT
+        value: "587"
+      - key: GMAIL_IMAP_HOST
+        value: imap.gmail.com
+      - key: GMAIL_IMAP_PORT
+        value: "993"
+      - key: GMAIL_ACCOUNT_CREATED_AT
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: HMAC_SECRET
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: N8N_WEBHOOK_API_KEY
+        sync: false
+      - key: SENDER_PHYSICAL_ADDRESS
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: RATE_LIMIT_RPM
+        value: "100"
+
+  # ── N8N Orchestrator ─────────────────────────────────────────────
+  - type: web
+    name: outreach-n8n
+    runtime: image
+    image:
+      url: docker.io/n8nio/n8n:latest
+    plan: free
+    region: frankfurt
+    disk:
+      name: n8n-data
+      mountPath: /home/node/.n8n
+      sizeGB: 1
+    envVars:
+      - key: N8N_HOST
+        value: outreach-n8n.onrender.com
+      - key: N8N_PROTOCOL
+        value: https
+      - key: WEBHOOK_URL
+        value: https://outreach-n8n.onrender.com/
+      - key: GENERIC_TIMEZONE
+        value: UTC
+      - key: DB_TYPE
+        value: sqlite
+      - key: N8N_BASIC_AUTH_ACTIVE
+        value: "true"
+      - key: N8N_BASIC_AUTH_USER
+        sync: false
+      - key: N8N_BASIC_AUTH_PASSWORD
+        sync: false
+
+databases:
+  - name: outreach-db
+    plan: free
+    region: frankfurt
+    databaseName: outreach
+    user: outreach
