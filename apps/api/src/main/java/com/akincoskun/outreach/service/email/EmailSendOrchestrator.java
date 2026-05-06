@@ -59,10 +59,12 @@ public class EmailSendOrchestrator {
         emailSendRepository.save(send);
 
         try {
-            // 3. SMTP send
+            // 3. SMTP send — replace PLACEHOLDER set by WriterService.injectFooter()
             String subject = draft.getEditedSubject() != null ? draft.getEditedSubject() : draft.getSubject();
-            String bodyHtml = draft.getEditedBodyHtml() != null ? draft.getEditedBodyHtml() : draft.getBodyHtml();
-            String bodyText = draft.getEditedBodyText() != null ? draft.getEditedBodyText() : draft.getBodyText();
+            String bodyHtml = (draft.getEditedBodyHtml() != null ? draft.getEditedBodyHtml() : draft.getBodyHtml())
+                .replace("/unsubscribe?token=PLACEHOLDER", unsubUrl);
+            String bodyText = (draft.getEditedBodyText() != null ? draft.getEditedBodyText() : draft.getBodyText())
+                .replace("/unsubscribe?token=PLACEHOLDER", unsubUrl);
 
             smtpService.send(toEmail, subject, bodyHtml, bodyText, messageId, unsubUrl, pixelUrl);
 

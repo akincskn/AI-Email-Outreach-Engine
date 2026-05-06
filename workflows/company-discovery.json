@@ -129,6 +129,76 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "equals",
+              "value2": "BLACKLISTED"
+            }
+          ]
+        }
+      },
+      "id": "check-blacklisted",
+      "name": "Is Blacklisted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {},
+      "id": "end-blacklisted",
+      "name": "Skip (Blacklisted)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1780, 180]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SPRING_API_URL }}/api/v1/email-accounts/by-company/{{ $('Analyze Company').item.json.companyId }}",
+        "authentication": "none",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "get-email-accounts",
+      "name": "Get Email Accounts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 420]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "={{ $json }}",
+        "options": {}
+      },
+      "id": "split-accounts",
+      "name": "Split Email Accounts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [2000, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SPRING_API_URL }}/agent/write",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"companyId\": \"{{ $('Analyze Company').item.json.companyId }}\",\n  \"emailAccountId\": \"{{ $json.id }}\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "write-draft",
+      "name": "Write Email Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2220, 420]
     }
   ],
   "connections": {
@@ -155,6 +225,27 @@
     "Extract Emails": {
       "main": [
         [{ "node": "Analyze Company", "type": "main", "index": 0 }]
+      ]
+    },
+    "Analyze Company": {
+      "main": [
+        [{ "node": "Is Blacklisted?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Blacklisted?": {
+      "main": [
+        [{ "node": "Skip (Blacklisted)", "type": "main", "index": 0 }],
+        [{ "node": "Get Email Accounts", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Email Accounts": {
+      "main": [
+        [{ "node": "Split Email Accounts", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Email Accounts": {
+      "main": [
+        [{ "node": "Write Email Draft", "type": "main", "index": 0 }]
       ]
     }
   },

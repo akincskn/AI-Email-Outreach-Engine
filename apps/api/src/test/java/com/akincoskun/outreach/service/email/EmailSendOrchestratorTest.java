@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
+import org.mockito.ArgumentCaptor;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -94,6 +95,31 @@ class EmailSendOrchestratorTest {
         assertThat(result.getStatus()).isEqualTo(SendStatus.SENT);
         assertThat(result.getSentAt()).isNotNull();
         verify(volumeLimiter).recordSend();
+    }
+
+    @Test
+    void unsubscribePlaceholderIsReplacedWithRealToken() {
+        String draftHtml = "<p>Hello</p><a href=\"/unsubscribe?token=PLACEHOLDER\">Unsubscribe</a>";
+        String draftText = "Hello\nUnsubscribe: /unsubscribe?token=PLACEHOLDER";
+        ReflectionTestUtils.setField(draft, "bodyHtml", draftHtml);
+        ReflectionTestUtils.setField(draft, "bodyText", draftText);
+
+        when(suppressionService.isSuppressed(anyString())).thenReturn(false);
+        when(volumeLimiter.canSendNow()).thenReturn(true);
+        when(hmacTokenService.generateToken("info@testcorp.com")).thenReturn("real-unsub-token");
+        when(hmacTokenService.generateToken("pixel")).thenReturn("real-pixel-token");
+        when(smtpService.send(any(), any(), any(), any(), any(), any(), any())).thenReturn("OK");
+
+        orchestrator.send(draft);
+
+        ArgumentCaptor<String> htmlCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> textCaptor = ArgumentCaptor.forClass(String.class);
+        verify(smtpService).send(any(), any(), htmlCaptor.capture(), textCaptor.capture(), any(), any(), any());
+
+        assertThat(htmlCaptor.getValue()).doesNotContain("PLACEHOLDER");
+        assertThat(htmlCaptor.getValue()).contains("real-unsub-token");
+        assertThat(textCaptor.getValue()).doesNotContain("PLACEHOLDER");
+        assertThat(textCaptor.getValue()).contains("real-unsub-token");
     }
 
     @Test
