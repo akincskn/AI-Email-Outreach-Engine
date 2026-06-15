@@ -7,8 +7,8 @@ spring:
 
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/outreach}
-    username: ${LOCAL_DB_USER:outreach}
-    password: ${LOCAL_DB_PASSWORD:outreach}
+    username: ${DATABASE_USERNAME:}
+    password: ${DATABASE_PASSWORD:}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
@@ -31,10 +31,10 @@ spring:
     baseline-on-migrate: false
 
   mail:
-    host: ${GMAIL_SMTP_HOST:localhost}
-    port: ${GMAIL_SMTP_PORT:1025}
-    username: ${GMAIL_USERNAME:}
-    password: ${GMAIL_APP_PASSWORD:}
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
@@ -79,15 +79,19 @@ app:
 
   sender:
     physical-address: ${SENDER_PHYSICAL_ADDRESS:Your Address Here}
-    from-name: "Akın Coşkun"
-    from-email: ${GMAIL_USERNAME:test@localhost}
+    from-name: ${MAIL_FROM_NAME:Akın Coşkun}
+    from-email: ${MAIL_FROM:test@localhost}
+
+  test:
+    recipient-override: ${LOCAL_TEST_RECIPIENT_OVERRIDE:}
 
   gmail:
-    imap-host: ${GMAIL_IMAP_HOST:localhost}
+    imap-host: ${GMAIL_IMAP_HOST:imap.gmail.com}
     imap-port: ${GMAIL_IMAP_PORT:993}
-    account-created-at: ${GMAIL_ACCOUNT_CREATED_AT:2026-05-05}
+    account-created-at: ${GMAIL_ACCOUNT_CREATED_AT:2026-05-04}
 
   ai:
+    mock-enabled: ${AI_MOCK_ENABLED:false}
     groq:
       api-key: ${GROQ_API_KEY:}
       base-url: https://api.groq.com/openai/v1
@@ -132,22 +136,6 @@ spring:
   config:
     activate:
       on-profile: local
-
-  mail:
-    host: ${MAILHOG_SMTP_HOST:localhost}
-    port: ${MAILHOG_SMTP_PORT:1025}
-    properties:
-      mail:
-        smtp:
-          auth: false
-          starttls:
-            enable: false
-            required: false
-
-  datasource:
-    url: jdbc:postgresql://${LOCAL_DB_HOST:localhost}:${LOCAL_DB_PORT:5432}/${LOCAL_DB_NAME:outreach}
-    username: ${LOCAL_DB_USER:outreach}
-    password: ${LOCAL_DB_PASSWORD:outreach}
 
 app:
   ai:

@@ -21,16 +21,22 @@ public class SmtpService {
     @Value("${app.sender.from-email}")
     private String fromEmail;
 
+    @Value("${app.test.recipient-override:}")
+    private String testRecipientOverride;
+
     public String send(String toEmail, String subject,
                        String bodyHtml, String bodyText,
                        String messageId, String unsubscribeUrl,
                        String trackingPixelUrl) {
         try {
+            // SAFETY: Local/test ortamında tüm mail'leri override adresine yönlendir
+            String actualRecipient = resolveRecipient(toEmail);
+
             MimeMessage msg = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
 
             helper.setFrom(fromEmail, fromName);
-            helper.setTo(toEmail);
+            helper.setTo(actualRecipient);
             helper.setSubject(subject);
 
             String htmlWithPixel = bodyHtml + buildTrackingPixel(trackingPixelUrl);
@@ -42,14 +48,37 @@ public class SmtpService {
             msg.setHeader("List-Unsubscribe-Post", "List-Unsubscribe=One-Click");
             msg.setHeader("X-Mailer", "AI-Outreach-Engine/1.0");
 
-            mailSender.send(msg);
-            log.info("Sent email to={} subject={}", toEmail, subject);
-            return "OK";
+            // Test mode için ek header (debug için)
+            if (isTestOverrideActive()) {
+                msg.setHeader("X-Original-Recipient", toEmail);
+                msg.setHeader("X-Test-Mode", "true");
+            }
 
+            mailSender.send(msg);
+
+            if (isTestOverrideActive()) {
+                log.warn("TEST MODE: Email redirected from={} to={} subject={}",
+                    toEmail, actualRecipient, subject);
+            } else {
+                log.info("Sent email to={} subject={}", actualRecipient, subject);
+            }
+
+            return "OK";
         } catch (Exception e) {
             log.error("SMTP send failed to={}: {}", toEmail, e.getMessage());
             throw new SmtpException("Failed to send to " + toEmail, e);
         }
+    }
+
+    private String resolveRecipient(String originalRecipient) {
+        if (isTestOverrideActive()) {
+            return testRecipientOverride.trim();
+        }
+        return originalRecipient;
+    }
+
+    private boolean isTestOverrideActive() {
+        return testRecipientOverride != null && !testRecipientOverride.isBlank();
     }
 
     private String buildTrackingPixel(String url) {
