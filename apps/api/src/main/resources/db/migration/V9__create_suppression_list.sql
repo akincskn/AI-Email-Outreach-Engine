@@ -11,5 +11,8 @@ CREATE TABLE suppression_list (
 );
 
 CREATE INDEX idx_suppression_email  ON suppression_list(email);
+-- Kalıcı suppression'lar (expires_at IS NULL) için partial index.
+-- NOW() IMMUTABLE olmadığından index predicate'inde kullanılamaz;
+-- süre bazlı (expires_at > NOW()) filtre query-time'da uygulanır.
 CREATE INDEX idx_suppression_active ON suppression_list(email)
-    WHERE expires_at IS NULL OR expires_at > NOW();
+    WHERE expires_at IS NULL;
