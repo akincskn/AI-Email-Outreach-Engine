@@ -35,7 +35,7 @@ public class EmailReply {
 
     private String classification;
 
-    @Column(nullable = false)
+    @Column(name = "is_handled", nullable = false)
     private boolean handled;
 
     @Column(nullable = false)

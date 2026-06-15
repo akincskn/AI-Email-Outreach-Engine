@@ -23,8 +23,8 @@ public class EmailSendOrchestrator {
     private final HmacTokenService hmacTokenService;
     private final EmailSendRepository emailSendRepository;
 
-    @Value("${server.port:8080}")
-    private String serverPort;
+    @Value("${app.base-url:http://localhost:8080}")
+    private String baseUrl;
 
     @Transactional
     public EmailSend send(EmailDraft draft) {
@@ -48,8 +48,8 @@ public class EmailSendOrchestrator {
         String pixelToken = hmacTokenService.generateToken("pixel");
         String unsubToken = hmacTokenService.generateToken(toEmail);
 
-        String pixelUrl   = "/api/v1/track/open?t=" + pixelToken;
-        String unsubUrl   = "/unsubscribe?token=" + unsubToken;
+        String pixelUrl   = baseUrl + "/api/v1/track/open?t=" + pixelToken;
+        String unsubUrl   = baseUrl + "/unsubscribe?token=" + unsubToken;
 
         EmailSend send = buildSend(draft, toEmail);
         send.setMessageId(messageId);

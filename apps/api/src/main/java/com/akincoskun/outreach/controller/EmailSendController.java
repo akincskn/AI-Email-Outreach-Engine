@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -24,6 +25,7 @@ public class EmailSendController {
     private final EmailSendMapper emailSendMapper;
 
     @GetMapping
+    @Transactional(readOnly = true)
     public ResponseEntity<Page<EmailSendResponse>> list(
             @RequestParam(required = false) SendStatus status,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -34,6 +36,7 @@ public class EmailSendController {
     }
 
     @GetMapping("/{id}")
+    @Transactional(readOnly = true)
     public ResponseEntity<EmailSendResponse> getById(@PathVariable UUID id) {
         EmailSend send = emailSendRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("EmailSend", id));

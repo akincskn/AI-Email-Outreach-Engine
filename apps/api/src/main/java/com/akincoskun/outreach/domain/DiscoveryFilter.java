@@ -37,7 +37,7 @@ public class DiscoveryFilter {
     @Column(columnDefinition = "TEXT[]")
     private List<String> keywords;
 
-    @Column(nullable = false)
+    @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
     @CreatedDate

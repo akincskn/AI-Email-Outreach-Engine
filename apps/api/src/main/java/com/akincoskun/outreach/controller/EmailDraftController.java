@@ -32,6 +32,7 @@ public class EmailDraftController {
     private final EmailSendOrchestrator sendOrchestrator;
 
     @GetMapping("/pending")
+    @Transactional(readOnly = true)
     public ResponseEntity<Page<EmailDraftResponse>> pending(
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(
@@ -41,6 +42,7 @@ public class EmailDraftController {
     }
 
     @GetMapping("/{id}")
+    @Transactional(readOnly = true)
     public ResponseEntity<EmailDraftResponse> getById(@PathVariable UUID id) {
         EmailDraft draft = emailDraftRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("EmailDraft", id));

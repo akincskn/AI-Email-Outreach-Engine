@@ -28,10 +28,10 @@ public class EmailAccount extends BaseEntity {
 
     private String extractedFrom;
 
-    @Column(nullable = false)
+    @Column(name = "is_valid_format", nullable = false)
     private boolean validFormat = true;
 
-    @Column(nullable = false)
+    @Column(name = "is_generic", nullable = false)
     private boolean generic = true;
 
     private String validationNote;
