@@ -6,7 +6,10 @@ if (-not (Test-Path $envFile)) {
     return
 }
 $loaded = 0
-Get-Content $envFile | ForEach-Object {
+# .env.local UTF-8 (BOM'suz) kaydedildi; PowerShell 5.1'in default'u sistem ANSI
+# codepage'i (TR locale'de Windows-1254) olduğundan Türkçe karakterler (Türkiye,
+# Akın Coşkun) bozulur. UTF-8 okuma ZORUNLU.
+Get-Content $envFile -Encoding UTF8 | ForEach-Object {
     if ($_ -match '^([^=#]+)=(.*)$') {
         [System.Environment]::SetEnvironmentVariable(
             $matches[1].Trim(), $matches[2].Trim(), "Process")
