@@ -27,4 +27,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   session: { strategy: "jwt" },
   secret: process.env.AUTH_SECRET ?? "dev-auth-secret-change-in-prod",
+  callbacks: {
+    // Drives the middleware: every route except /login requires a logged-in user.
+    authorized({ auth, request }) {
+      const isLoggedIn = !!auth?.user;
+      if (request.nextUrl.pathname === "/login") return true;
+      return isLoggedIn;
+    },
+  },
 });

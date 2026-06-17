@@ -25,7 +25,7 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (result?.error) {
-      setError("Invalid credentials");
+      setError("Geçersiz kullanıcı adı veya şifre");
     } else {
       router.push("/");
     }
