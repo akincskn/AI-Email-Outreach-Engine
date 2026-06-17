@@ -40,14 +40,27 @@ public class LlmRouter {
         }
         """;
 
+    private static final String MOCK_MATCHER_RESPONSE = """
+        {
+          "primary_product_slug": "kolayaidat",
+          "primary_confidence": 0.92,
+          "secondary_product_slug": "cerezmatik",
+          "secondary_confidence": 0.55,
+          "reasoning": "Türkiye'de apartman/site yönetimi yapan bir şirket — aidat takibi en büyük operasyonel yükleri. KolayAidat doğrudan bu sorunu çözüyor; web siteleri için Çerezmatik ikincil uyum sağlar."
+        }
+        """;
+
+    // writer_v2 fixture: focused on the matched product (KolayAidat for TR property mgmt).
+    // {company_name} is substituted with the real company name in the mock branch below,
+    // so the fixture faithfully mirrors what the live LLM produces (named intro).
     private static final String MOCK_WRITER_RESPONSE = """
         {
-          "subject": "Akın'dan kısa tanışma — 7 ücretsiz SaaS aracı",
-          "body_html": "<p>Merhaba,</p><p>Akın Coşkun, full-stack developer. Ücretsiz geliştirdiğim <a href='https://rivalradar-three.vercel.app'>RivalRadar</a> ve <a href='https://chatbot-web-peach.vercel.app'>AI Chatbot</a> araçları şirketinize faydalı olabilir.</p><p>Tüm portföy: <a href='https://akin-coskun.web.app'>akin-coskun.web.app</a></p><p>İlginizi çeker mi?</p><p>Saygılarımla,<br>Akın Coşkun</p><hr><p>{{PHYSICAL_ADDRESS}}</p><p><a href='{{UNSUBSCRIBE_URL}}'>Aboneliği iptal et</a></p>",
-          "body_text": "Merhaba, Akın Coşkun, full-stack developer. Ücretsiz geliştirdiğim RivalRadar ve AI Chatbot araçları şirketinize faydalı olabilir. Tüm portföy: https://akin-coskun.web.app İlginizi çeker mi? Saygılarımla, Akın Coşkun {{PHYSICAL_ADDRESS}} Aboneliği iptal et: {{UNSUBSCRIBE_URL}}",
+          "subject": "Aidat takibini kolaylaştıran ücretsiz bir araç",
+          "body_html": "<p>Merhaba {company_name} ekibi, sitenizi inceledim — apartman/site yönetimi yaptığınızı gördüm. Aidat takibinin çoğu yerde hâlâ Excel'le yürütüldüğünü ve bunun zaman aldığını biliyorum.</p><p>Ben Akın Coşkun, full-stack developer'ım; küçük işletmeler için ücretsiz araçlar geliştiriyorum.</p><p>Tam bu iş için <a href='https://kolayaidat.vercel.app'>KolayAidat</a>'ı yaptım: aidatları otomatik takip eder, sakinlere hatırlatma gönderir ve online ödeme imkânı sunar — Excel'e veda. Tamamen ücretsiz.</p><p>İsterseniz web siteniz için KVKK çerez uyumunu çözen <a href='https://cerezmatik.vercel.app'>Çerezmatik</a>'e de bakabilirsiniz. Toplam 7 ücretsiz aracım için: <a href='https://akin-coskun.web.app'>akin-coskun.web.app</a></p><p>İhtiyacınıza uyuyor mu? Cevap yazmanıza gerek yok, dilerseniz deneyin.</p><p>İyi günler,<br>Akın Coşkun<br><a href='https://github.com/akincskn'>github.com/akincskn</a></p><hr><p style='font-size:11px;color:#888;'>{{PHYSICAL_ADDRESS}}<br>Aboneliği iptal etmek için <a href='{{UNSUBSCRIBE_URL}}'>buraya</a> tıklayın.</p>",
+          "body_text": "Merhaba {company_name} ekibi, sitenizi inceledim — apartman/site yönetimi yaptığınızı gördüm. Aidat takibinin çoğu yerde hâlâ Excel'le yürütüldüğünü ve bunun zaman aldığını biliyorum.\\n\\nBen Akın Coşkun, full-stack developer'ım; küçük işletmeler için ücretsiz araçlar geliştiriyorum.\\n\\nTam bu iş için KolayAidat'ı yaptım: aidatları otomatik takip eder, sakinlere hatırlatma gönderir ve online ödeme imkânı sunar — Excel'e veda. Tamamen ücretsiz. https://kolayaidat.vercel.app\\n\\nİsterseniz web siteniz için KVKK çerez uyumunu çözen Çerezmatik'e de bakabilirsiniz: https://cerezmatik.vercel.app\\nToplam 7 ücretsiz aracım: https://akin-coskun.web.app\\n\\nİhtiyacınıza uyuyor mu? Cevap yazmanıza gerek yok, dilerseniz deneyin.\\n\\nİyi günler,\\nAkın Coşkun\\nhttps://github.com/akincskn\\n\\n---\\n{{PHYSICAL_ADDRESS}}\\nAboneliği iptal: {{UNSUBSCRIBE_URL}}",
           "language": "tr",
-          "personalization_signals": ["TR şirketi", "teknoloji sektörü"],
-          "highlighted_products": ["RivalRadar", "AI Chatbot Platform"],
+          "personalization_signals": ["sektör (apartman yönetimi)", "dil eşleşmesi", "Excel aidat sorunu"],
+          "highlighted_products": ["kolayaidat", "cerezmatik"],
           "warnings": []
         }
         """;
@@ -58,9 +71,26 @@ public class LlmRouter {
 
         if (mockEnabled) {
             log.info("[MOCK LLM] Returning fixture response for agent={}", agentName);
-            return agentName.equals("writer") ? MOCK_WRITER_RESPONSE : MOCK_ANALYZER_RESPONSE;
+            return switch (agentName) {
+                case "writer" -> MOCK_WRITER_RESPONSE.replace("{company_name}", mockCompanyName(company));
+                case "matcher" -> MOCK_MATCHER_RESPONSE;
+                default -> MOCK_ANALYZER_RESPONSE;
+            };
         }
 
+        return liveComplete(agentName, promptVersion, systemPrompt, userPrompt, company);
+    }
+
+    /** Mock-only: substitute the fixture's {company_name} so the named intro mirrors live output. */
+    private String mockCompanyName(Company company) {
+        if (company != null && company.getName() != null && !company.getName().isBlank()) {
+            return company.getName();
+        }
+        return "ekibiniz";
+    }
+
+    private String liveComplete(String agentName, String promptVersion,
+                                String systemPrompt, String userPrompt, Company company) {
         long start = System.currentTimeMillis();
 
         try {

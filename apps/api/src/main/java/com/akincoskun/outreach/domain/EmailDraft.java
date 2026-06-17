@@ -49,6 +49,18 @@ public class EmailDraft extends BaseEntity {
     @Column(columnDefinition = "jsonb")
     private List<String> warnings;
 
+    @Column(length = 64)
+    private String matchedProductSlug;
+
+    @Column(length = 64)
+    private String secondaryProductSlug;
+
+    @Column(precision = 3, scale = 2)
+    private java.math.BigDecimal matchConfidence;
+
+    @Column(columnDefinition = "TEXT")
+    private String matchReasoning;
+
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private DraftStatus status;

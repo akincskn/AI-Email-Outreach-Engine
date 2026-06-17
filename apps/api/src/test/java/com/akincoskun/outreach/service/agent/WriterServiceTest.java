@@ -33,6 +33,9 @@ class WriterServiceTest {
     @BeforeEach
     void inject() {
         ReflectionTestUtils.setField(service, "physicalAddress", "Istanbul, Turkey");
+        ReflectionTestUtils.setField(service, "senderName", "Akın Coşkun");
+        ReflectionTestUtils.setField(service, "portfolioUrl", "https://akin-coskun.web.app");
+        ReflectionTestUtils.setField(service, "githubUrl", "https://github.com/akincskn");
     }
 
     private Company company() {
@@ -89,6 +92,74 @@ class WriterServiceTest {
         assertThat(draft.getLanguage()).isEqualTo("tr");
         assertThat(draft.getBodyHtml()).contains("Istanbul, Turkey");
         assertThat(draft.getBodyHtml()).doesNotContain("{{PHYSICAL_ADDRESS}}");
+    }
+
+    private Company propertyMgmtCompanyWithMatch() {
+        return Company.builder()
+            .domain("acme-yonetim.com")
+            .name("Acme Apartman Yönetimi")
+            .source("osm")
+            .countryCode("TR")
+            .status(CompanyStatus.MATCHED)
+            .analysis(new java.util.HashMap<>(Map.of(
+                "industry", "real_estate",
+                "sub_industry", "property_management",
+                "primary_language", "tr",
+                "country_hint", "TR",
+                "target_audience", "businesses",
+                "potential_problems", java.util.List.of("Manual aidat takibi"),
+                "match", new java.util.HashMap<>(Map.of(
+                    "primary_product_slug", "kolayaidat",
+                    "primary_confidence", 0.92,
+                    "secondary_product_slug", "cerezmatik",
+                    "secondary_confidence", 0.55,
+                    "reasoning", "Property management firm in Turkey."
+                ))
+            )))
+            .build();
+    }
+
+    private EmailAccount yonetimAccount(Company c) {
+        return EmailAccount.builder()
+            .company(c)
+            .email("info@acme-yonetim.com")
+            .prefixType("info")
+            .extractedAt(java.time.Instant.now())
+            .build();
+    }
+
+    @Test
+    void usesWriterV2AndPopulatesMatchColumnsWhenCompanyHasMatch() {
+        Company c = propertyMgmtCompanyWithMatch();
+        EmailAccount a = yonetimAccount(c);
+        // The matched-product user prompt must carry the primary product details.
+        when(llmRouter.complete(eq("writer"), eq("writer_v2"), contains("KolayAidat"), anyString(), any()))
+            .thenReturn(validDraftJson("tr"));
+        when(emailDraftRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        EmailDraft draft = service.write(c, a);
+
+        assertThat(draft.getStatus()).isEqualTo(DraftStatus.PENDING);
+        assertThat(draft.getPromptVersion()).isEqualTo("writer_v2");
+        assertThat(draft.getMatchedProductSlug()).isEqualTo("kolayaidat");
+        assertThat(draft.getSecondaryProductSlug()).isEqualTo("cerezmatik");
+        assertThat(draft.getMatchConfidence()).isEqualByComparingTo("0.92");
+        assertThat(draft.getMatchReasoning()).isEqualTo("Property management firm in Turkey.");
+    }
+
+    @Test
+    void fallsBackToWriterV1WhenNoMatchPresent() {
+        Company c = company(); // analysis has no "match" key
+        EmailAccount a = emailAccount(c);
+        when(llmRouter.complete(eq("writer"), eq("writer_v1"), anyString(), anyString(), any()))
+            .thenReturn(validDraftJson("tr"));
+        when(emailDraftRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        EmailDraft draft = service.write(c, a);
+
+        assertThat(draft.getStatus()).isEqualTo(DraftStatus.PENDING);
+        assertThat(draft.getPromptVersion()).isEqualTo("writer_v1");
+        assertThat(draft.getMatchedProductSlug()).isNull();
     }
 
     @Test

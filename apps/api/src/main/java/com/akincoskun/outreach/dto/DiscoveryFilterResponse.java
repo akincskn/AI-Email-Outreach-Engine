@@ -11,6 +11,7 @@ public record DiscoveryFilterResponse(
     String countryCode,
     String city,
     List<String> keywords,
+    String targetProduct,
     boolean active,
     Instant createdAt
 ) {}

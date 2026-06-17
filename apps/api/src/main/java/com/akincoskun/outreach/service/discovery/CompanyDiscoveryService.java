@@ -2,11 +2,13 @@ package com.akincoskun.outreach.service.discovery;
 
 import com.akincoskun.outreach.domain.Company;
 import com.akincoskun.outreach.domain.CompanyStatus;
+import com.akincoskun.outreach.domain.DiscoveredSkipped;
 import com.akincoskun.outreach.domain.DiscoveryFilter;
 import com.akincoskun.outreach.dto.CompanyDiscoverRequest;
 import com.akincoskun.outreach.exception.BusinessException;
-import com.akincoskun.outreach.integration.GoogleMapsClient;
+import com.akincoskun.outreach.integration.CompanyDataSource;
 import com.akincoskun.outreach.repository.CompanyRepository;
+import com.akincoskun.outreach.repository.DiscoveredSkippedRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -14,9 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -24,7 +26,8 @@ import java.util.Optional;
 public class CompanyDiscoveryService {
 
     private final CompanyRepository companyRepository;
-    private final GoogleMapsClient googleMapsClient;
+    private final DiscoveredSkippedRepository discoveredSkippedRepository;
+    private final CompanyDataSource companyDataSource;
 
     @Transactional
     public Company discoverOrSkip(CompanyDiscoverRequest request) {
@@ -52,40 +55,83 @@ public class CompanyDiscoveryService {
 
     @Transactional
     public int discoverFromFilter(DiscoveryFilter filter) {
-        String query = filter.getIndustry() != null ? filter.getIndustry() : "";
-        String location = Optional.ofNullable(filter.getCity())
-            .or(() -> Optional.ofNullable(filter.getCountryCode()))
-            .orElse("");
+        CompanyDataSource.DiscoveryQuery query = new CompanyDataSource.DiscoveryQuery(
+            filter.getIndustry(),
+            filter.getCountryCode(),
+            filter.getCity()
+        );
 
-        List<GoogleMapsClient.PlaceResult> places = googleMapsClient.searchPlaces(query, location);
-        int saved = 0;
+        List<CompanyDataSource.DiscoveredPlace> places = companyDataSource.search(query);
+        int alreadyKnown = 0;       // already in companies
+        int alreadySkipped = 0;     // already in discovered_skipped
+        int newNoWebsite = 0;       // skipped now (no website)
+        int newWithWebsite = 0;     // added to companies now
 
-        for (GoogleMapsClient.PlaceResult place : places) {
-            String domain = extractDomain(place.website());
-            if (domain == null) continue;
-
-            if (!companyRepository.existsByDomain(domain)) {
-                Company company = Company.builder()
-                    .domain(domain)
-                    .name(place.name())
-                    .websiteUrl(place.website())
-                    .source("google_maps")
-                    .sourceMetadata(Map.of(
-                        "filterId", filter.getId().toString(),
-                        "address", Optional.ofNullable(place.formattedAddress()).orElse("")
-                    ))
-                    .discoveredAt(Instant.now())
-                    .countryCode(filter.getCountryCode())
-                    .city(filter.getCity())
-                    .status(CompanyStatus.NEW)
-                    .build();
-                companyRepository.save(company);
-                saved++;
+        for (CompanyDataSource.DiscoveredPlace place : places) {
+            // Cheapest dedup first: have we already audited this exact OSM id?
+            if (place.osmId() != null && discoveredSkippedRepository.existsByOsmId(place.osmId())) {
+                alreadySkipped++;
+                continue;
             }
+
+            String domain = extractDomain(place.website());
+
+            // No website means no domain to scrape emails from: keep it out of
+            // the pipeline (Faz 1.5 spec), but audit it in discovered_skipped.
+            if (domain == null) {
+                recordSkipped(filter, place);
+                newNoWebsite++;
+                continue;
+            }
+
+            if (companyRepository.existsByDomain(domain)) {
+                alreadyKnown++;
+                continue;
+            }
+
+            Company company = Company.builder()
+                .domain(domain)
+                .name(place.name())
+                .websiteUrl(place.website())
+                .source(companyDataSource.sourceName())
+                .sourceMetadata(buildSourceMetadata(filter, place))
+                .discoveredAt(Instant.now())
+                .countryCode(filter.getCountryCode())
+                .city(filter.getCity())
+                .status(CompanyStatus.NEW)
+                .build();
+            companyRepository.save(company);
+            newWithWebsite++;
         }
 
-        log.info("Discovery filter '{}': found {} new companies", filter.getName(), saved);
-        return saved;
+        // Invariant: total = alreadyKnown + alreadySkipped + newNoWebsite + newWithWebsite
+        log.info("Discovery filter '{}': total={} | alreadyKnown={} alreadySkipped={} "
+                + "newNoWebsite={} newWithWebsite={}",
+            filter.getName(), places.size(), alreadyKnown, alreadySkipped, newNoWebsite, newWithWebsite);
+        return newWithWebsite;
+    }
+
+    private void recordSkipped(DiscoveryFilter filter, CompanyDataSource.DiscoveredPlace place) {
+        DiscoveredSkipped skipped = DiscoveredSkipped.builder()
+            .osmId(place.osmId())
+            .name(place.name())
+            .skipReason("NO_WEBSITE")
+            .phone(place.phone())
+            .address(place.address())
+            .industry(filter.getIndustry())
+            .countryCode(filter.getCountryCode())
+            .source(companyDataSource.sourceName())
+            .discoveredAt(Instant.now())
+            .build();
+        discoveredSkippedRepository.save(skipped);
+    }
+
+    private Map<String, Object> buildSourceMetadata(DiscoveryFilter filter, CompanyDataSource.DiscoveredPlace place) {
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("filterId", filter.getId().toString());
+        if (place.address() != null) metadata.put("address", place.address());
+        if (place.phone() != null) metadata.put("phone", place.phone());
+        return metadata;
     }
 
     @Transactional

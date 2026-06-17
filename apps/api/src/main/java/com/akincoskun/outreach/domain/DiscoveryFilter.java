@@ -37,6 +37,13 @@ public class DiscoveryFilter {
     @Column(columnDefinition = "TEXT[]")
     private List<String> keywords;
 
+    /**
+     * Product slug this filter biases the Matcher toward (Görev 4). Nullable for
+     * backward compatibility with legacy generic filters that target no product.
+     */
+    @Column(name = "target_product", length = 64)
+    private String targetProduct;
+
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 

@@ -21,5 +21,8 @@ public record DiscoveryFilterRequest(
 
     List<@Size(max = 64) String> keywords,
 
+    @Size(max = 64)
+    String targetProduct,
+
     boolean active
 ) {}

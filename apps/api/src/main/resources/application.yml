@@ -80,11 +80,15 @@ app:
     jwt-expiration-ms: 86400000
     hmac-secret: ${HMAC_SECRET:dev-hmac-secret-change-in-production-32chars}
     n8n-api-key: ${N8N_WEBHOOK_API_KEY:dev-n8n-api-key}
+    # Bearer token for /api/** and /agent/** (Görev 8.1). Override in production.
+    api-key: ${API_KEY:dev-api-key-change-in-production-32chars}
 
   sender:
     physical-address: ${SENDER_PHYSICAL_ADDRESS:Your Address Here}
     from-name: ${MAIL_FROM_NAME:Akın Coşkun}
     from-email: ${MAIL_FROM:test@localhost}
+    portfolio-url: ${SENDER_PORTFOLIO:https://akin-coskun.web.app}
+    github-url: ${SENDER_GITHUB:https://github.com/akincskn}
 
   test:
     recipient-override: ${LOCAL_TEST_RECIPIENT_OVERRIDE:}
@@ -107,8 +111,10 @@ app:
       model: gemini-2.0-flash
       timeout-seconds: 30
 
-  google-maps:
-    api-key: ${GOOGLE_MAPS_API_KEY:}
+  osm:
+    base-url: ${OSM_OVERPASS_URL:https://overpass-api.de/api/interpreter}
+    min-request-interval-ms: ${OSM_MIN_INTERVAL_MS:1000}
+    timeout-seconds: ${OSM_TIMEOUT_SECONDS:25}
 
   slack:
     webhook-url: ${SLACK_WEBHOOK_URL:}
@@ -143,7 +149,9 @@ spring:
 
 app:
   ai:
-    mock-enabled: true
+    # Default true so plain local dev needs no API keys, but honor AI_MOCK_ENABLED
+    # so Görev 5 (live Groq end-to-end) can flip it to false from .env.local.
+    mock-enabled: ${AI_MOCK_ENABLED:true}
 
 ---
 spring:

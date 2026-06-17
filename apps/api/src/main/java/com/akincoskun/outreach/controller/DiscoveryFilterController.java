@@ -45,6 +45,7 @@ public class DiscoveryFilterController {
             .countryCode(request.countryCode())
             .city(request.city())
             .keywords(request.keywords())
+            .targetProduct(request.targetProduct())
             .active(request.active())
             .build();
         return ResponseEntity.ok(discoveryFilterMapper.toResponse(discoveryFilterRepository.save(filter)));
@@ -62,6 +63,7 @@ public class DiscoveryFilterController {
         filter.setCountryCode(request.countryCode());
         filter.setCity(request.city());
         filter.setKeywords(request.keywords());
+        filter.setTargetProduct(request.targetProduct());
         filter.setActive(request.active());
         return ResponseEntity.ok(discoveryFilterMapper.toResponse(discoveryFilterRepository.save(filter)));
     }

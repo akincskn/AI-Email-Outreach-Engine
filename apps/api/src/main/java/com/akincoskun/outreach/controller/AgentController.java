@@ -5,7 +5,9 @@ import com.akincoskun.outreach.domain.EmailAccount;
 import com.akincoskun.outreach.exception.ResourceNotFoundException;
 import com.akincoskun.outreach.repository.CompanyRepository;
 import com.akincoskun.outreach.repository.EmailAccountRepository;
+import com.akincoskun.outreach.dto.MatchResult;
 import com.akincoskun.outreach.service.agent.AnalyzerService;
+import com.akincoskun.outreach.service.agent.MatcherService;
 import com.akincoskun.outreach.service.agent.WriterService;
 import com.akincoskun.outreach.service.discovery.EmailExtractionService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class AgentController {
     private final EmailAccountRepository emailAccountRepository;
     private final EmailExtractionService emailExtractionService;
     private final AnalyzerService analyzerService;
+    private final MatcherService matcherService;
     private final WriterService writerService;
 
     @PostMapping("/extract-emails")
@@ -51,6 +54,26 @@ public class AgentController {
             "companyId", companyId.toString(),
             "status", company.getStatus().name(),
             "analysis", analysis
+        ));
+    }
+
+    @PostMapping("/match")
+    public ResponseEntity<Map<String, Object>> match(@RequestBody Map<String, String> body) {
+        UUID companyId = UUID.fromString(body.get("companyId"));
+        Company company = companyRepository.findById(companyId)
+            .orElseThrow(() -> new ResourceNotFoundException("Company", companyId));
+
+        // Optional bias from the discovery filter's target_product (Görev 4).
+        String biasProductSlug = body.get("targetProduct");
+        MatchResult result = matcherService.match(company, biasProductSlug);
+        log.info("Match for {}: primary={} matched={}", company.getDomain(),
+            result.primaryProductSlug(), result.matched());
+        return ResponseEntity.ok(Map.of(
+            "companyId", companyId.toString(),
+            "status", company.getStatus().name(),
+            "matched", result.matched(),
+            "primaryProductSlug", result.primaryProductSlug() != null ? result.primaryProductSlug() : "none",
+            "primaryConfidence", result.primaryConfidence()
         ));
     }
 

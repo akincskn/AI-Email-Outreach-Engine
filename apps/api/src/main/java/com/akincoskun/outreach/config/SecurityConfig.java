@@ -8,6 +8,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -21,6 +22,9 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
 
+    @Value("${app.security.api-key}")
+    private String apiKey;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -28,6 +32,7 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // Public: health, unsubscribe landing, tracking pixel, API docs.
                 .requestMatchers(
                     "/actuator/health",
                     "/actuator/info",
@@ -37,10 +42,10 @@ public class SecurityConfig {
                     "/unsubscribe",
                     "/api/v1/track/**"
                 ).permitAll()
-                // Faz 1: single-user local tool — permit all API calls
-                // Faz 2: replace with JWT filter + N8N API key filter
-                .anyRequest().permitAll()
-            );
+                // Everything else (/api/**, /agent/**) needs a valid Bearer api-key.
+                .anyRequest().authenticated()
+            )
+            .addFilterBefore(new ApiKeyAuthFilter(apiKey), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
