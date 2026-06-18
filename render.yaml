@@ -1,3 +1,9 @@
+# Render Blueprint (reference). The primary deploy path is the manual UI walkthrough
+# in docs/DEPLOYMENT.md; this file documents the same config as infra-as-code.
+#
+# DB: we use Neon PostgreSQL (not a Render-managed DB), so DATABASE_URL is entered
+# manually as a JDBC URL: jdbc:postgresql://<host>/<db>?sslmode=require
+# (Render's managed-DB connectionString is non-JDBC and would break Spring's datasource.url.)
 services:
   # ── Spring Boot API ──────────────────────────────────────────────
   - type: web
@@ -7,34 +13,59 @@ services:
     dockerfilePath: Dockerfile
     plan: free
     region: frankfurt
+    healthCheckPath: /actuator/health
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
+
+      # Database (Neon — JDBC URL + credentials entered manually)
       - key: DATABASE_URL
-        fromDatabase:
-          name: outreach-db
-          property: connectionString
-      - key: GROQ_API_KEY
         sync: false
-      - key: GEMINI_API_KEY
+      - key: DATABASE_USERNAME
         sync: false
-      - key: GOOGLE_MAPS_API_KEY
+      - key: DATABASE_PASSWORD
         sync: false
-      - key: GMAIL_USERNAME
-        sync: false
-      - key: GMAIL_APP_PASSWORD
-        sync: false
-      - key: GMAIL_SMTP_HOST
+
+      # Mail — SMTP send AND IMAP reply/bounce login both use MAIL_USERNAME/MAIL_PASSWORD
+      - key: MAIL_HOST
         value: smtp.gmail.com
-      - key: GMAIL_SMTP_PORT
+      - key: MAIL_PORT
         value: "587"
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: Akın Coşkun
       - key: GMAIL_IMAP_HOST
         value: imap.gmail.com
       - key: GMAIL_IMAP_PORT
         value: "993"
       - key: GMAIL_ACCOUNT_CREATED_AT
         sync: false
-      - key: SLACK_WEBHOOK_URL
+
+      # AI
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AI_MOCK_ENABLED
+        value: "false"
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+
+      # Sender (CAN-SPAM)
+      - key: SENDER_PHYSICAL_ADDRESS
+        sync: false
+      - key: SENDER_GITHUB
+        value: https://github.com/akincskn
+      - key: SENDER_PORTFOLIO
+        value: https://akin-coskun.web.app
+
+      # Security — generate fresh strong values for production
+      - key: API_KEY
         sync: false
       - key: HMAC_SECRET
         generateValue: true
@@ -42,9 +73,15 @@ services:
         generateValue: true
       - key: N8N_WEBHOOK_API_KEY
         sync: false
-      - key: SENDER_PHYSICAL_ADDRESS
+
+      # URLs / CORS — fill BASE_URL after the service URL is assigned,
+      # CORS_ALLOWED_ORIGINS after Vercel is deployed
+      - key: BASE_URL
         sync: false
       - key: CORS_ALLOWED_ORIGINS
+        sync: false
+
+      - key: SLACK_WEBHOOK_URL
         sync: false
       - key: RATE_LIMIT_RPM
         value: "100"
@@ -78,10 +115,6 @@ services:
         sync: false
       - key: N8N_BASIC_AUTH_PASSWORD
         sync: false
-
-databases:
-  - name: outreach-db
-    plan: free
-    region: frankfurt
-    databaseName: outreach
-    user: outreach
+      # Spring Boot API base URL, reachable from N8N
+      - key: SPRING_API_URL
+        sync: false

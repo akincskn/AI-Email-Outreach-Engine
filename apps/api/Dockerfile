@@ -24,10 +24,12 @@ USER appuser
 
 EXPOSE 8080
 
-ENV JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom -XX:+UseZGC -XX:MaxRAMPercentage=75.0"
+# SerialGC: lowest footprint for the 512 MB / shared-CPU Render free tier.
+# ZGC/G1 reserve memory for large heaps and regress on a ~384 MB heap.
+ENV JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom -XX:+UseSerialGC -XX:MaxRAMPercentage=75.0"
 ENV SPRING_PROFILES_ACTIVE=prod
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+  CMD wget -qO- "http://localhost:${PORT:-8080}/actuator/health" || exit 1
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
