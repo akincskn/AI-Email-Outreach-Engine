@@ -11,8 +11,7 @@ target/
 *.war
 *.ear
 *.nar
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
+# .mvn/wrapper/maven-wrapper.jar  (Render needs this for Docker build)!**/src/main/**/target/
 !**/src/test/**/target/
 hs_err_pid*
 replay_pid*
