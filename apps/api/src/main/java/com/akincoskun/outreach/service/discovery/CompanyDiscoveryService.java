@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,8 +54,22 @@ public class CompanyDiscoveryService {
         return companyRepository.save(company);
     }
 
+    /**
+     * Outcome of a discovery run: the per-bucket counts plus the actual list of
+     * companies newly added to {@code companies}. The pipeline orchestrator needs
+     * the entities (not just a count) so it can extract/analyze/match/write on
+     * each one. {@code newCompanies.size() == newWithWebsite}.
+     */
+    public record DiscoveryOutcome(
+        int total,
+        int alreadyKnown,
+        int alreadySkipped,
+        int newNoWebsite,
+        List<Company> newCompanies
+    ) {}
+
     @Transactional
-    public int discoverFromFilter(DiscoveryFilter filter) {
+    public DiscoveryOutcome discoverFromFilterDetailed(DiscoveryFilter filter) {
         CompanyDataSource.DiscoveryQuery query = new CompanyDataSource.DiscoveryQuery(
             filter.getIndustry(),
             filter.getCountryCode(),
@@ -65,7 +80,7 @@ public class CompanyDiscoveryService {
         int alreadyKnown = 0;       // already in companies
         int alreadySkipped = 0;     // already in discovered_skipped
         int newNoWebsite = 0;       // skipped now (no website)
-        int newWithWebsite = 0;     // added to companies now
+        List<Company> newCompanies = new ArrayList<>();  // added to companies now
 
         for (CompanyDataSource.DiscoveredPlace place : places) {
             // Cheapest dedup first: have we already audited this exact OSM id?
@@ -100,15 +115,19 @@ public class CompanyDiscoveryService {
                 .city(filter.getCity())
                 .status(CompanyStatus.NEW)
                 .build();
-            companyRepository.save(company);
-            newWithWebsite++;
+            newCompanies.add(companyRepository.save(company));
         }
 
         // Invariant: total = alreadyKnown + alreadySkipped + newNoWebsite + newWithWebsite
         log.info("Discovery filter '{}': total={} | alreadyKnown={} alreadySkipped={} "
                 + "newNoWebsite={} newWithWebsite={}",
-            filter.getName(), places.size(), alreadyKnown, alreadySkipped, newNoWebsite, newWithWebsite);
-        return newWithWebsite;
+            filter.getName(), places.size(), alreadyKnown, alreadySkipped, newNoWebsite, newCompanies.size());
+        return new DiscoveryOutcome(places.size(), alreadyKnown, alreadySkipped, newNoWebsite, newCompanies);
+    }
+
+    @Transactional
+    public int discoverFromFilter(DiscoveryFilter filter) {
+        return discoverFromFilterDetailed(filter).newCompanies().size();
     }
 
     private void recordSkipped(DiscoveryFilter filter, CompanyDataSource.DiscoveredPlace place) {
