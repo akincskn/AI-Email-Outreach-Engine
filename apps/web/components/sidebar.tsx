@@ -11,10 +11,12 @@ import {
   MessageSquare,
   ShieldOff,
   Settings,
+  Workflow,
 } from "lucide-react";
 
 const navItems = [
   { href: "/",            label: "Dashboard",   icon: LayoutDashboard },
+  { href: "/pipeline",    label: "Pipeline",    icon: Workflow },
   { href: "/companies",   label: "Companies",   icon: Building2 },
   { href: "/drafts",      label: "Drafts",      icon: FileText },
   { href: "/sent",        label: "Sent",        icon: Send },
