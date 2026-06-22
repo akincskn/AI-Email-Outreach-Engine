@@ -97,7 +97,7 @@ class OsmClientTest {
 
     @Test
     void buildsOverpassQlWithMappedIndustryTagAndCityArea() {
-        String ql = client.buildQuery(new DiscoveryQuery("property_management", "TR", "İstanbul"));
+        String ql = client.buildQuery(new DiscoveryQuery("property_management", "TR", "İstanbul", null));
 
         assertThat(ql)
             .contains("[out:json][timeout:25];")
@@ -109,7 +109,7 @@ class OsmClientTest {
 
     @Test
     void fallsBackToCountryAreaAndDefaultTagForUnknownIndustry() {
-        String ql = client.buildQuery(new DiscoveryQuery("mystery_sector", "NL", null));
+        String ql = client.buildQuery(new DiscoveryQuery("mystery_sector", "NL", null, null));
 
         assertThat(ql)
             .contains("area[\"ISO3166-1\"=\"NL\"]->.searchArea;")

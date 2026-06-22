@@ -4,6 +4,7 @@ import com.akincoskun.outreach.domain.Company;
 import com.akincoskun.outreach.domain.CompanyStatus;
 import com.akincoskun.outreach.domain.DiscoveredSkipped;
 import com.akincoskun.outreach.domain.DiscoveryFilter;
+import com.akincoskun.outreach.domain.DiscoverySource;
 import com.akincoskun.outreach.dto.CompanyDiscoverRequest;
 import com.akincoskun.outreach.exception.BusinessException;
 import com.akincoskun.outreach.integration.CompanyDataSource;
@@ -28,7 +29,8 @@ public class CompanyDiscoveryService {
 
     private final CompanyRepository companyRepository;
     private final DiscoveredSkippedRepository discoveredSkippedRepository;
-    private final CompanyDataSource companyDataSource;
+    /** All registered providers, keyed by Spring bean name (e.g. {@code osmClient}). */
+    private final Map<String, CompanyDataSource> dataSources;
 
     @Transactional
     public Company discoverOrSkip(CompanyDiscoverRequest request) {
@@ -70,13 +72,16 @@ public class CompanyDiscoveryService {
 
     @Transactional
     public DiscoveryOutcome discoverFromFilterDetailed(DiscoveryFilter filter) {
+        CompanyDataSource source = resolveSource(filter);
+
         CompanyDataSource.DiscoveryQuery query = new CompanyDataSource.DiscoveryQuery(
             filter.getIndustry(),
             filter.getCountryCode(),
-            filter.getCity()
+            filter.getCity(),
+            firstKeyword(filter)
         );
 
-        List<CompanyDataSource.DiscoveredPlace> places = companyDataSource.search(query);
+        List<CompanyDataSource.DiscoveredPlace> places = source.search(query);
         int alreadyKnown = 0;       // already in companies
         int alreadySkipped = 0;     // already in discovered_skipped
         int newNoWebsite = 0;       // skipped now (no website)
@@ -94,7 +99,7 @@ public class CompanyDiscoveryService {
             // No website means no domain to scrape emails from: keep it out of
             // the pipeline (Faz 1.5 spec), but audit it in discovered_skipped.
             if (domain == null) {
-                recordSkipped(filter, place);
+                recordSkipped(filter, place, source.sourceName());
                 newNoWebsite++;
                 continue;
             }
@@ -108,7 +113,7 @@ public class CompanyDiscoveryService {
                 .domain(domain)
                 .name(place.name())
                 .websiteUrl(place.website())
-                .source(companyDataSource.sourceName())
+                .source(source.sourceName())
                 .sourceMetadata(buildSourceMetadata(filter, place))
                 .discoveredAt(Instant.now())
                 .countryCode(filter.getCountryCode())
@@ -130,7 +135,7 @@ public class CompanyDiscoveryService {
         return discoverFromFilterDetailed(filter).newCompanies().size();
     }
 
-    private void recordSkipped(DiscoveryFilter filter, CompanyDataSource.DiscoveredPlace place) {
+    private void recordSkipped(DiscoveryFilter filter, CompanyDataSource.DiscoveredPlace place, String sourceName) {
         DiscoveredSkipped skipped = DiscoveredSkipped.builder()
             .osmId(place.osmId())
             .name(place.name())
@@ -139,10 +144,31 @@ public class CompanyDiscoveryService {
             .address(place.address())
             .industry(filter.getIndustry())
             .countryCode(filter.getCountryCode())
-            .source(companyDataSource.sourceName())
+            .source(sourceName)
             .discoveredAt(Instant.now())
             .build();
         discoveredSkippedRepository.save(skipped);
+    }
+
+    /** Resolves the provider bean for a filter's {@link DiscoverySource}. */
+    private CompanyDataSource resolveSource(DiscoveryFilter filter) {
+        DiscoverySource type = filter.getSource() != null ? filter.getSource() : DiscoverySource.OSM;
+        CompanyDataSource source = dataSources.get(type.beanName());
+        if (source == null) {
+            throw new BusinessException("Data source '" + type.code() + "' is not available"
+                + " (bean '" + type.beanName() + "' not registered)."
+                + (type == DiscoverySource.APIFY ? " Set APIFY_API_TOKEN to enable Apify." : ""));
+        }
+        return source;
+    }
+
+    /** First non-blank keyword of the filter, used to build a richer search string. */
+    private String firstKeyword(DiscoveryFilter filter) {
+        if (filter.getKeywords() == null) return null;
+        return filter.getKeywords().stream()
+            .filter(k -> k != null && !k.isBlank())
+            .findFirst()
+            .orElse(null);
     }
 
     private Map<String, Object> buildSourceMetadata(DiscoveryFilter filter, CompanyDataSource.DiscoveredPlace place) {

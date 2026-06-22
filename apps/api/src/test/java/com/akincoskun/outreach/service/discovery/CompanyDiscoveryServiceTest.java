@@ -3,24 +3,28 @@ package com.akincoskun.outreach.service.discovery;
 import com.akincoskun.outreach.domain.Company;
 import com.akincoskun.outreach.domain.CompanyStatus;
 import com.akincoskun.outreach.domain.DiscoveryFilter;
+import com.akincoskun.outreach.domain.DiscoverySource;
 import com.akincoskun.outreach.dto.CompanyDiscoverRequest;
 import com.akincoskun.outreach.domain.DiscoveredSkipped;
+import com.akincoskun.outreach.exception.BusinessException;
 import com.akincoskun.outreach.integration.CompanyDataSource;
 import com.akincoskun.outreach.integration.CompanyDataSource.DiscoveredPlace;
 import com.akincoskun.outreach.repository.CompanyRepository;
 import com.akincoskun.outreach.repository.DiscoveredSkippedRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -29,8 +33,18 @@ class CompanyDiscoveryServiceTest {
 
     @Mock CompanyRepository companyRepository;
     @Mock DiscoveredSkippedRepository discoveredSkippedRepository;
-    @Mock CompanyDataSource companyDataSource;
-    @InjectMocks CompanyDiscoveryService service;
+    @Mock CompanyDataSource companyDataSource;   // registered as "osmClient"
+    @Mock CompanyDataSource apifyDataSource;      // registered as "apifyClient"
+    CompanyDiscoveryService service;
+
+    @BeforeEach
+    void setUp() {
+        // Spring injects a bean-name → bean map; replicate it with both providers.
+        service = new CompanyDiscoveryService(
+            companyRepository,
+            discoveredSkippedRepository,
+            Map.of("osmClient", companyDataSource, "apifyClient", apifyDataSource));
+    }
 
     @Test
     void savesNewCompanyAndNormalizesDomain() {
@@ -156,5 +170,60 @@ class CompanyDiscoveryServiceTest {
         verify(discoveredSkippedRepository, never()).save(any());
         verify(companyRepository, never()).save(any());
         verify(companyRepository, never()).existsByDomain(any());
+    }
+
+    @Test
+    void apifyFilter_routesToApifyClientNotOsm() {
+        DiscoveryFilter filter = DiscoveryFilter.builder()
+            .id(UUID.randomUUID())
+            .name("TR Property Management")
+            .industry("property_management")
+            .countryCode("TR")
+            .city("İstanbul")
+            .source(DiscoverySource.APIFY)
+            .build();
+
+        when(apifyDataSource.search(any())).thenReturn(List.of());
+
+        service.discoverFromFilter(filter);
+
+        verify(apifyDataSource).search(any());
+        verify(companyDataSource, never()).search(any());
+    }
+
+    @Test
+    void osmFilter_routesToOsmClient() {
+        DiscoveryFilter filter = DiscoveryFilter.builder()
+            .id(UUID.randomUUID())
+            .name("TR Restaurants")
+            .industry("restaurant")
+            .countryCode("TR")
+            .source(DiscoverySource.OSM)
+            .build();
+
+        when(companyDataSource.search(any())).thenReturn(List.of());
+
+        service.discoverFromFilter(filter);
+
+        verify(companyDataSource).search(any());
+        verify(apifyDataSource, never()).search(any());
+    }
+
+    @Test
+    void filterForUnavailableSource_throwsBusinessException() {
+        // Apify bean absent (no APIFY_API_TOKEN): only OSM is registered.
+        CompanyDiscoveryService osmOnly = new CompanyDiscoveryService(
+            companyRepository, discoveredSkippedRepository, Map.of("osmClient", companyDataSource));
+
+        DiscoveryFilter filter = DiscoveryFilter.builder()
+            .id(UUID.randomUUID())
+            .name("TR Property Management")
+            .source(DiscoverySource.APIFY)
+            .build();
+
+        assertThatThrownBy(() -> osmOnly.discoverFromFilter(filter))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("apify")
+            .hasMessageContaining("APIFY_API_TOKEN");
     }
 }

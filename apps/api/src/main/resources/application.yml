@@ -116,6 +116,14 @@ app:
     min-request-interval-ms: ${OSM_MIN_INTERVAL_MS:1000}
     timeout-seconds: ${OSM_TIMEOUT_SECONDS:25}
 
+  apify:
+    # When APIFY_API_TOKEN is unset the ApifyClient bean is not registered and
+    # discovery runs OSM-only. Filters with source='apify' then fail fast.
+    api-token: ${APIFY_API_TOKEN:}
+    google-maps-actor: ${APIFY_GOOGLE_MAPS_ACTOR:compass~crawler-google-places}
+    timeout-seconds: ${APIFY_TIMEOUT_SECONDS:120}
+    max-places-per-search: ${APIFY_MAX_PLACES:20}
+
   slack:
     webhook-url: ${SLACK_WEBHOOK_URL:}
 

@@ -1,25 +1,186 @@
 package com.akincoskun.outreach.integration;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Faz 2 placeholder for an <a href="https://apify.com">Apify</a>-backed data
- * source (Google Maps scrapers, etc.).
+ * Discovers companies via the <a href="https://apify.com">Apify</a> Google Maps
+ * scraper actor (default {@code compass/crawler-google-places}). Used as a
+ * second {@link CompanyDataSource} where OSM is too sparse (notably Turkey).
  *
- * <p>Deliberately <b>not</b> a Spring {@code @Component}: registering it as a
- * bean would create an ambiguous {@link CompanyDataSource} alongside
- * {@link OsmClient}. It exists only to lock the interface contract in place so
- * Faz 2 can wire a real implementation without reshaping the pipeline.
+ * <p>Registered as a bean only when {@code app.apify.api-token} is configured,
+ * so a deployment without an Apify token simply runs OSM-only. Cost control is
+ * deliberate: Apify bills per scraped place, so we disable the paid enrichments
+ * ({@code scrapeContacts}, images, review personal data) to preserve the free
+ * tier (~1250 places/month).
  */
+@Component
+@ConditionalOnProperty(name = "app.apify.api-token")
+@Slf4j
 public class ApifyClient implements CompanyDataSource {
 
-    @Override
-    public List<DiscoveredPlace> search(DiscoveryQuery query) {
-        throw new UnsupportedOperationException("ApifyClient is a Faz 2 placeholder");
+    private static final String RUN_SYNC_PATH = "/v2/acts/{actorId}/run-sync-get-dataset-items";
+
+    private final WebClient webClient;
+    private final String apiToken;
+    private final String actorId;
+    private final int timeoutSeconds;
+    private final int maxPlacesPerSearch;
+
+    public ApifyClient(
+        @Value("${app.apify.api-token:}") String apiToken,
+        @Value("${app.apify.google-maps-actor:compass~crawler-google-places}") String actorId,
+        @Value("${app.apify.timeout-seconds:120}") int timeoutSeconds,
+        @Value("${app.apify.max-places-per-search:20}") int maxPlacesPerSearch
+    ) {
+        this.apiToken = apiToken;
+        this.actorId = actorId;
+        this.timeoutSeconds = timeoutSeconds;
+        this.maxPlacesPerSearch = maxPlacesPerSearch;
+        this.webClient = WebClient.builder()
+            .baseUrl("https://api.apify.com")
+            .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiToken)
+            .build();
     }
 
     @Override
     public String sourceName() {
         return "apify";
     }
+
+    @Override
+    public List<DiscoveredPlace> search(DiscoveryQuery query) {
+        if (apiToken == null || apiToken.isBlank()) {
+            log.error("Apify selected but APIFY_API_TOKEN is not set — returning no results");
+            return Collections.emptyList();
+        }
+
+        Map<String, Object> input = buildInput(query);
+        log.info("Apify search: '{}' in '{}'", input.get("searchStringsArray"), input.get("locationQuery"));
+
+        // run-sync-get-dataset-items runs the actor and returns the dataset items
+        // (a JSON array) in a single blocking call.
+        List<ApifyPlace> items = webClient.post()
+            .uri(uri -> uri.path(RUN_SYNC_PATH)
+                .queryParam("memory", 4096)
+                .queryParam("timeout", timeoutSeconds)
+                .build(actorId))
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(input)
+            .retrieve()
+            .bodyToMono(new ParameterizedTypeReference<List<ApifyPlace>>() {})
+            .onErrorResume(ex -> {
+                log.error("Apify API error: {}", ex.getMessage());
+                return Mono.just(Collections.emptyList());
+            })
+            .timeout(Duration.ofSeconds(timeoutSeconds + 60L))
+            .block();
+
+        List<DiscoveredPlace> places = parse(items);
+        log.info("Apify returned {} place(s)", places.size());
+        return places;
+    }
+
+    /** Builds the actor input JSON. Paid enrichments are OFF to save credits. */
+    Map<String, Object> buildInput(DiscoveryQuery query) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("searchStringsArray", List.of(searchString(query)));
+        input.put("locationQuery", locationQuery(query));
+        input.put("language", "tr");
+        input.put("maxCrawledPlacesPerSearch", maxPlacesPerSearch);
+        input.put("maxImages", 0);
+        input.put("includeWebResults", false);
+        input.put("scrapeReviewsPersonalData", false);
+        input.put("scrapeContacts", false);
+        return input;
+    }
+
+    /** Search term: prefer the filter keyword, fall back to industry; append city. */
+    String searchString(DiscoveryQuery query) {
+        String term = firstNonBlank(query.keyword(), query.industry());
+        String city = query.city();
+        if (city != null && !city.isBlank()) {
+            return (term == null ? "" : term + " ") + city.strip();
+        }
+        return term == null ? "" : term;
+    }
+
+    /** Location for the actor: "{city}, {country name}" or just the country name. */
+    String locationQuery(DiscoveryQuery query) {
+        String country = countryName(query.countryCode());
+        if (query.city() != null && !query.city().isBlank()) {
+            return query.city().strip() + (country.isBlank() ? "" : ", " + country);
+        }
+        return country;
+    }
+
+    /** Maps an ISO country code to the full name the actor expects. */
+    static String countryName(String code) {
+        if (code == null) return "";
+        return switch (code.toUpperCase()) {
+            case "TR" -> "Turkey";
+            case "US" -> "United States";
+            case "GB" -> "United Kingdom";
+            case "DE" -> "Germany";
+            default -> code.toUpperCase();
+        };
+    }
+
+    List<DiscoveredPlace> parse(List<ApifyPlace> items) {
+        if (items == null) return Collections.emptyList();
+        List<DiscoveredPlace> places = new ArrayList<>();
+        for (ApifyPlace item : items) {
+            if (item == null) continue;
+            String name = blankToNull(item.title());
+            if (name == null) continue;
+            // The Google Maps place URL is the stable dedup id (osmId slot).
+            String externalId = firstNonBlank(item.url(), item.placeId(), name);
+            places.add(new DiscoveredPlace(
+                externalId,
+                name,
+                blankToNull(item.website()),
+                blankToNull(item.address()),
+                blankToNull(item.phone())));
+        }
+        return places;
+    }
+
+    /** Treats null, blank, and the literal "undefined"/"null" strings as absent. */
+    private static String blankToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.strip();
+        if (trimmed.isEmpty() || trimmed.equalsIgnoreCase("undefined")
+                || trimmed.equalsIgnoreCase("null")) {
+            return null;
+        }
+        return trimmed;
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            String cleaned = blankToNull(value);
+            if (cleaned != null) return cleaned;
+        }
+        return null;
+    }
+
+    /** A single place from the actor's dataset. Unknown fields are ignored. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record ApifyPlace(String title, String website, String phone, String address,
+                      String city, String url, String placeId) {}
 }

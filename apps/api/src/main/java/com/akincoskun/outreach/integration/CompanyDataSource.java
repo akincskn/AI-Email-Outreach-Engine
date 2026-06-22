@@ -21,8 +21,13 @@ public interface CompanyDataSource {
     /** Stable identifier persisted on {@code companies.source} (e.g. {@code "osm"}). */
     String sourceName();
 
-    /** Provider-agnostic query: an industry slug plus an optional location. */
-    record DiscoveryQuery(String industry, String countryCode, String city) {}
+    /**
+     * Provider-agnostic query: an industry slug, an optional location, and an
+     * optional free-text {@code keyword} (the filter's first keyword). OSM keys
+     * off {@code industry}; Apify prefers {@code keyword} for a natural Google
+     * Maps search string (e.g. "apartman yönetimi" beats "property_management").
+     */
+    record DiscoveryQuery(String industry, String countryCode, String city, String keyword) {}
 
     /**
      * A single discovered place. {@code website} may be null/blank (no site).

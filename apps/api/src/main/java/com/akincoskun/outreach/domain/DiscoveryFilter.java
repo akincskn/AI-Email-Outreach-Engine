@@ -44,6 +44,16 @@ public class DiscoveryFilter {
     @Column(name = "target_product", length = 64)
     private String targetProduct;
 
+    /**
+     * Which provider this filter discovers from (Görev 11). Defaults to OSM for
+     * backward compatibility; the V23 migration flips TR Property Management to
+     * Apify. Persisted as the lowercase code via {@link DiscoverySourceConverter}.
+     */
+    @Convert(converter = DiscoverySourceConverter.class)
+    @Column(name = "source", nullable = false, length = 32)
+    @Builder.Default
+    private DiscoverySource source = DiscoverySource.OSM;
+
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
