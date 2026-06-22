@@ -126,6 +126,78 @@ class MatcherServiceTest {
     }
 
     @Test
+    void strictTarget_offTargetMatch_isSkipped() {
+        // Filter requires kolayaidat, but the AI confidently picks the chatbot.
+        // Strict mode must SKIP rather than draft an off-target email.
+        String json = """
+            {
+              "primary_product_slug": "ai-chatbot-platform",
+              "primary_confidence": 0.9,
+              "secondary_product_slug": null,
+              "secondary_confidence": null,
+              "reasoning": "Coworking space — chatbot fits."
+            }""";
+        when(llmRouter.complete(any(), anyString(), anyString(), anyString(), any()))
+            .thenReturn(json);
+        when(companyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Company c = propertyMgmtCompany();
+        MatchResult result = service.match(c, "kolayaidat");
+
+        assertThat(result.matched()).isFalse();
+        assertThat(c.getStatus()).isEqualTo(CompanyStatus.SKIPPED);
+        assertThat(c.getStatusReason())
+            .startsWith("MATCH_OFF_TARGET:")
+            .contains("ai-chatbot-platform")
+            .contains("kolayaidat");
+        assertThat(c.getAnalysis()).doesNotContainKey("match");
+    }
+
+    @Test
+    void strictTarget_onTargetMatch_isAccepted() {
+        String json = """
+            {
+              "primary_product_slug": "kolayaidat",
+              "primary_confidence": 0.9,
+              "secondary_product_slug": null,
+              "secondary_confidence": null,
+              "reasoning": "Property management firm."
+            }""";
+        when(llmRouter.complete(any(), anyString(), anyString(), anyString(), any()))
+            .thenReturn(json);
+        when(companyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Company c = propertyMgmtCompany();
+        MatchResult result = service.match(c, "kolayaidat");
+
+        assertThat(result.matched()).isTrue();
+        assertThat(c.getStatus()).isEqualTo(CompanyStatus.MATCHED);
+    }
+
+    @Test
+    void noTarget_acceptsWhateverAiReturns() {
+        // Null hint → legacy behaviour, the AI's confident pick is accepted as-is.
+        String json = """
+            {
+              "primary_product_slug": "ai-chatbot-platform",
+              "primary_confidence": 0.9,
+              "secondary_product_slug": null,
+              "secondary_confidence": null,
+              "reasoning": "Chatbot fits."
+            }""";
+        when(llmRouter.complete(any(), anyString(), anyString(), anyString(), any()))
+            .thenReturn(json);
+        when(companyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Company c = propertyMgmtCompany();
+        MatchResult result = service.match(c, null);
+
+        assertThat(result.matched()).isTrue();
+        assertThat(result.primaryProductSlug()).isEqualTo("ai-chatbot-platform");
+        assertThat(c.getStatus()).isEqualTo(CompanyStatus.MATCHED);
+    }
+
+    @Test
     void unknownSecondarySlug_isDropped() {
         String json = """
             {

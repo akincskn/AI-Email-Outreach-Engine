@@ -163,6 +163,34 @@ class WriterServiceTest {
     }
 
     @Test
+    void convertsMarkdownLinksInHtmlToAnchors() {
+        Company c = company();
+        EmailAccount a = emailAccount(c);
+        // Writer emitted a markdown link in body_html — must become a real anchor,
+        // with the scheme stripped from the visible text by cleanAnchorText.
+        String json = """
+            {
+              "subject": "Restoranlar için ücretsiz AI araçları",
+              "body_html": "<p>Bkz [AI Chatbot Platform](https://chatbot-web-peach.vercel.app/) aracı.</p><hr><p>{{PHYSICAL_ADDRESS}}</p><a href=\\"{{UNSUBSCRIBE_URL}}\\">Unsubscribe</a>",
+              "body_text": "Bkz https://chatbot-web-peach.vercel.app/\\n\\n---\\n{{PHYSICAL_ADDRESS}}\\n{{UNSUBSCRIBE_URL}}",
+              "language": "tr",
+              "personalization_signals": ["industry_mentioned"],
+              "highlighted_products": ["ai-chatbot-platform"],
+              "warnings": []
+            }""";
+        when(llmRouter.complete(any(), anyString(), anyString(), anyString(), any()))
+            .thenReturn(json);
+        when(emailDraftRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        EmailDraft draft = service.write(c, a);
+
+        assertThat(draft.getBodyHtml())
+            .contains("<a href=\"https://chatbot-web-peach.vercel.app/\">AI Chatbot Platform</a>")
+            .doesNotContain("[AI Chatbot Platform]")
+            .doesNotContain("](https://");
+    }
+
+    @Test
     void marksWriterFailedWhenValidationFails() {
         Company c = company();
         EmailAccount a = emailAccount(c);

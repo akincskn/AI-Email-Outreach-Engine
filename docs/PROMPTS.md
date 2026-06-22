@@ -435,6 +435,8 @@ Kod-level `QUALITY_WARN` yalnızca <90 veya >160 kelimede tetiklenir (block etme
 
 **Türkçe kalite kuralları (bitirmeden önce gözden geçir):** Doğru Türkçe kelime kullan — `"demostrarı"` DEĞİL `"demoları"`; `"tools"` DEĞİL `"araçlar"`; `"feature"` DEĞİL `"özellik"`; bağlama göre `"platform"` yerine `"sistem"/"uygulama"`. Yaygın AI hataları: yanlış ek çekimi, yabancı kök + Türkçe ek karışımı (ör. "demostrarı").
 
+**Link sözdizimi (ZORUNLU):** `body_html` field'ında **HTML anchor** kullan: `<a href="URL">TEXT</a>`. `body_html`'de **asla** markdown link `[TEXT](URL)` kullanma — Gmail bunu literal metin olarak render eder, çirkin görünür. `body_text` field'ında **düz URL** kullan (link sözdizimi yok). Safety net: `WriterService.convertMarkdownLinks` yine de body_html'de kalan `[TEXT](URL)` kalıplarını `<a href="URL">TEXT</a>`'e çevirir (prompt kuralı + deterministik post-process, biri diğerinin yedeği).
+
 **HTML link formatlama (Görev 6.2 — deterministik post-process, prompt-level DEĞİL):** Model ürünü **adıyla + tam https:// URL** yazar (prompt'a link-text kuralı koymak modeli saptırıp ürün adını URL ile değiştiriyordu). Sonra `WriterService.cleanAnchorText` body_html'de anchor **metninden** scheme'i sıyırır (`>https://` → `>`) → `<a href="https://akin-coskun.web.app">akin-coskun.web.app</a>`. href ve body_text dokunulmaz; relatif `{{UNSUBSCRIBE_URL}}` (scheme yok) etkilenmez, send'de absolute URL + HMAC token ile değişir.
 
 **Şirket adı ZORUNLU:** Body'nin **ilk cümlesi** şirket adını açıkça geçirmeli, ör. `"Merhaba {Şirket Adı} ekibi, sitenizi inceledim ve..."`. İsim intro'da kullanılmazsa response **INVALID** sayılır. (Bu, en güçlü kişiselleştirme sinyalinin her zaman bulunmasını garanti eder.)

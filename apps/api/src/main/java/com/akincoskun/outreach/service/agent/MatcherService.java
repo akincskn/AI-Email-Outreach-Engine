@@ -107,6 +107,28 @@ public class MatcherService {
 
         MatchResult result = toResult(parsed);
 
+        // Strict targetProduct enforcement: when the discovery filter declares a
+        // targetProduct, the AI's primary pick MUST equal it. A confident match
+        // on a DIFFERENT product is strategically wrong (e.g. a coworking firm
+        // under a KolayAidat filter getting matched to the chatbot) — skip the
+        // company rather than draft an off-target email. An empty/null hint keeps
+        // the old behaviour: whatever the AI returns is accepted.
+        boolean strict = biasProductSlug != null && !biasProductSlug.isBlank();
+        if (strict && result.matched()
+                && !biasProductSlug.strip().equalsIgnoreCase(result.primaryProductSlug())) {
+            company.setStatus(CompanyStatus.SKIPPED);
+            company.setStatusReason(String.format(
+                "MATCH_OFF_TARGET: AI suggested %s, filter requires %s",
+                result.primaryProductSlug(), biasProductSlug.strip()));
+            log.info("Off-target match for '{}' ({}), skipping", company.getDomain(),
+                company.getStatusReason());
+            companyRepository.save(company);
+            // Force matched=false so the orchestrator skips the Writer.
+            return new MatchResult(result.primaryProductSlug(), result.primaryConfidence(),
+                result.secondaryProductSlug(), result.secondaryConfidence(),
+                result.reasoning(), false);
+        }
+
         if (result.matched()) {
             persistMatch(company, result);
             company.setStatus(CompanyStatus.MATCHED);

@@ -153,6 +153,11 @@ public class WriterService {
         geliştirdim"), and put its full https:// URL in the anchor href. Do not
         replace the product name with the bare URL.
 
+        LINK SYNTAX (strict):
+        - body_html: use HTML anchor tags <a href="URL">TEXT</a>. NEVER use markdown
+          link syntax [TEXT](URL) in body_html — Gmail renders it as literal text.
+        - body_text: use plain URLs (no link syntax, no brackets/parentheses).
+
         OUTPUT FORMAT — Return ONLY a valid JSON object:
         {
           "subject": string (40-70 chars),
@@ -357,7 +362,7 @@ public class WriterService {
                                   String promptVersion, Map<String, Object> match) {
         Map<String, Object> result = parseJson(rawJson);
 
-        String bodyHtml = cleanAnchorText(injectFooter((String) result.get("body_html")));
+        String bodyHtml = cleanAnchorText(convertMarkdownLinks(injectFooter((String) result.get("body_html"))));
         String bodyText = injectFooter((String) result.get("body_text"));
 
         String primaryProductSlug = match != null ? (String) match.get("primary_product_slug") : null;
@@ -416,6 +421,24 @@ public class WriterService {
         return content
             .replace("{{PHYSICAL_ADDRESS}}", physicalAddress)
             .replace("{{UNSUBSCRIBE_URL}}", "/unsubscribe?token=PLACEHOLDER");
+    }
+
+    /**
+     * Matches a markdown link {@code [text](url)} — text has no ']', url no ')'.
+     */
+    private static final java.util.regex.Pattern MARKDOWN_LINK =
+        java.util.regex.Pattern.compile("\\[([^\\]]+)\\]\\(([^)]+)\\)");
+
+    /**
+     * Safety net: some Writer outputs still emit markdown links {@code [text](url)}
+     * in body_html, which Gmail renders as literal text. Convert them to real HTML
+     * anchors. Runs BEFORE {@link #cleanAnchorText} so the generated anchor text
+     * also gets its scheme stripped. Only body_html is touched; body_text keeps
+     * its plain URLs.
+     */
+    private String convertMarkdownLinks(String html) {
+        if (html == null) return "";
+        return MARKDOWN_LINK.matcher(html).replaceAll("<a href=\"$2\">$1</a>");
     }
 
     /**
