@@ -55,7 +55,7 @@ class ApifyClientTest {
     }
 
     @Test
-    void parsesItemsAndMapsGoogleMapsUrlToExternalId() {
+    void parsesItemsAndUsesShortPlaceIdAsExternalId() {
         List<ApifyPlace> items = List.of(
             new ApifyPlace("Acme Yönetim", "https://acme-yonetim.com", "+90 212 000 0000",
                 "Bağdat Cd, İstanbul", "İstanbul", "https://maps.google.com/?cid=123", "ChIJ_acme"),
@@ -69,16 +69,44 @@ class ApifyClientTest {
         assertThat(places).hasSize(2);
 
         DiscoveredPlace first = places.get(0);
-        assertThat(first.osmId()).isEqualTo("https://maps.google.com/?cid=123");
+        // The place_id (short, ~30 chars) is the dedup id — NOT the long Maps URL.
+        assertThat(first.osmId()).isEqualTo("ChIJ_acme");
         assertThat(first.name()).isEqualTo("Acme Yönetim");
         assertThat(first.website()).isEqualTo("https://acme-yonetim.com");
         assertThat(first.address()).isEqualTo("Bağdat Cd, İstanbul");
         assertThat(first.phone()).isEqualTo("+90 212 000 0000");
 
         DiscoveredPlace second = places.get(1);
-        assertThat(second.osmId()).isEqualTo("https://maps.google.com/?cid=456");
+        assertThat(second.osmId()).isEqualTo("ChIJ_beta");
         assertThat(second.website()).isNull();   // "undefined" normalized away
         assertThat(second.phone()).isNull();
+    }
+
+    @Test
+    void externalIdFallsBackToPlaceIdParsedFromUrlWhenFieldMissing() {
+        // Real actor URL form: a long /maps/search URL carrying query_place_id.
+        String longUrl = "https://www.google.com/maps/search/?api=1"
+            + "&query=AYHAN%20AYDIN%20EMLAK%20Kadikoy%20Istanbul%20Turkey%20long%20address"
+            + "&query_place_id=ChIJN1t_tDeuEmsRUsoyG83frY4";
+        assertThat(longUrl.length()).isGreaterThan(128);
+
+        List<ApifyPlace> items = List.of(
+            new ApifyPlace("Ayhan Aydın Emlak", "https://x.com", null, null, null, longUrl, null)
+        );
+
+        DiscoveredPlace place = client.parse(items).get(0);
+
+        assertThat(place.osmId())
+            .isEqualTo("ChIJN1t_tDeuEmsRUsoyG83frY4")
+            .hasSizeLessThan(128);
+    }
+
+    @Test
+    void extractPlaceIdReturnsNullWhenUrlHasNoPlaceIdParam() {
+        assertThat(ApifyClient.extractPlaceId(null)).isNull();
+        assertThat(ApifyClient.extractPlaceId("https://maps.google.com/?cid=123")).isNull();
+        assertThat(ApifyClient.extractPlaceId("https://x/?query_place_id=ChIJ_abc&hl=tr"))
+            .isEqualTo("ChIJ_abc");
     }
 
     @Test

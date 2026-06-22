@@ -17,6 +17,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Discovers companies via the <a href="https://apify.com">Apify</a> Google Maps
@@ -35,6 +37,9 @@ import java.util.Map;
 public class ApifyClient implements CompanyDataSource {
 
     private static final String RUN_SYNC_PATH = "/v2/acts/{actorId}/run-sync-get-dataset-items";
+
+    /** Matches {@code ...&query_place_id=ChIJ...} in a Google Maps place URL. */
+    private static final Pattern PLACE_ID_PARAM = Pattern.compile("query_place_id=([^&]+)");
 
     private final WebClient webClient;
     private final String apiToken;
@@ -148,8 +153,10 @@ public class ApifyClient implements CompanyDataSource {
             if (item == null) continue;
             String name = blankToNull(item.title());
             if (name == null) continue;
-            // The Google Maps place URL is the stable dedup id (osmId slot).
-            String externalId = firstNonBlank(item.url(), item.placeId(), name);
+            // Stable dedup id (osmId slot): the short Google place_id (~30 chars).
+            // The full Maps URL is 150-250 chars and overflows osm_id VARCHAR(128);
+            // the place_id is enough to rebuild the URL when needed.
+            String externalId = firstNonBlank(item.placeId(), extractPlaceId(item.url()), name);
             places.add(new DiscoveredPlace(
                 externalId,
                 name,
@@ -158,6 +165,13 @@ public class ApifyClient implements CompanyDataSource {
                 blankToNull(item.phone())));
         }
         return places;
+    }
+
+    /** Pulls the {@code ChIJ…} place id out of a Maps URL's query_place_id param. */
+    static String extractPlaceId(String googleMapsUrl) {
+        if (googleMapsUrl == null) return null;
+        Matcher matcher = PLACE_ID_PARAM.matcher(googleMapsUrl);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     /** Treats null, blank, and the literal "undefined"/"null" strings as absent. */
