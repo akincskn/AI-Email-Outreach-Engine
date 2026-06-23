@@ -123,6 +123,25 @@ class EmailSendOrchestratorTest {
     }
 
     @Test
+    void normalizeBaseUrlStripsStrayKeyPrefixAndTrailingSlash() {
+        ReflectionTestUtils.setField(orchestrator, "baseUrl",
+            "BASE_URL=https://ai-email-outreach-engine.onrender.com/");
+        ReflectionTestUtils.invokeMethod(orchestrator, "normalizeBaseUrl");
+
+        assertThat((String) ReflectionTestUtils.getField(orchestrator, "baseUrl"))
+            .isEqualTo("https://ai-email-outreach-engine.onrender.com");
+    }
+
+    @Test
+    void normalizeBaseUrlLeavesCleanValueUnchanged() {
+        ReflectionTestUtils.setField(orchestrator, "baseUrl", "https://outreach.test");
+        ReflectionTestUtils.invokeMethod(orchestrator, "normalizeBaseUrl");
+
+        assertThat((String) ReflectionTestUtils.getField(orchestrator, "baseUrl"))
+            .isEqualTo("https://outreach.test");
+    }
+
+    @Test
     void smtpFailureSetsFailedStatus() {
         when(suppressionService.isSuppressed(anyString())).thenReturn(false);
         when(volumeLimiter.canSendNow()).thenReturn(true);

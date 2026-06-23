@@ -3,6 +3,7 @@ package com.akincoskun.outreach.service.email;
 import com.akincoskun.outreach.domain.*;
 import com.akincoskun.outreach.exception.BusinessException;
 import com.akincoskun.outreach.repository.EmailSendRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,27 @@ public class EmailSendOrchestrator {
 
     @Value("${app.base-url:http://localhost:8080}")
     private String baseUrl;
+
+    /**
+     * Normalize {@code app.base-url} once at startup. Guards against a Render env
+     * value mistakenly entered as "BASE_URL=https://..." (the literal "BASE_URL="
+     * prefix otherwise leaks into every unsubscribe/tracking URL) and trims any
+     * trailing slash so URL concatenation stays clean.
+     */
+    @PostConstruct
+    void normalizeBaseUrl() {
+        if (baseUrl == null) return;
+        String cleaned = baseUrl.trim();
+        if (cleaned.regionMatches(true, 0, "BASE_URL=", 0, "BASE_URL=".length())) {
+            cleaned = cleaned.substring("BASE_URL=".length()).trim();
+            log.warn("app.base-url had a stray 'BASE_URL=' prefix; stripped it to '{}'. "
+                + "Fix the BASE_URL env var value (it must not include the key name).", cleaned);
+        }
+        while (cleaned.endsWith("/")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 1);
+        }
+        baseUrl = cleaned;
+    }
 
     @Transactional
     public EmailSend send(EmailDraft draft) {

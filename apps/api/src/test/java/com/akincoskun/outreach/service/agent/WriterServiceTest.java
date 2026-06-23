@@ -32,7 +32,6 @@ class WriterServiceTest {
 
     @BeforeEach
     void inject() {
-        ReflectionTestUtils.setField(service, "physicalAddress", "Istanbul, Turkey");
         ReflectionTestUtils.setField(service, "senderName", "Akın Coşkun");
         ReflectionTestUtils.setField(service, "portfolioUrl", "https://akin-coskun.web.app");
         ReflectionTestUtils.setField(service, "githubUrl", "https://github.com/akincskn");
@@ -65,12 +64,14 @@ class WriterServiceTest {
             .build();
     }
 
+    // Writer no longer emits any footer (signature/address/unsubscribe) — that is
+    // appended by SmtpService. The body is pure content.
     private String validDraftJson(String lang) {
         return """
             {
               "subject": "Restoranlar için ücretsiz AI araçları",
-              "body_html": "<p>Merhaba Mario ekibi,</p><p>Akın Coşkun.</p><hr><p>{{PHYSICAL_ADDRESS}}</p><a href=\\"{{UNSUBSCRIBE_URL}}\\">Unsubscribe</a>",
-              "body_text": "Merhaba Mario ekibi,\\n\\nAkın Coşkun.\\n\\n---\\n{{PHYSICAL_ADDRESS}}\\n{{UNSUBSCRIBE_URL}}",
+              "body_html": "<p>Merhaba Mario ekibi, sitenizi inceledim.</p><p>Ben Akın Coşkun, ücretsiz araçlar geliştiriyorum.</p><p>İhtiyacınıza uyuyor mu?</p>",
+              "body_text": "Merhaba Mario ekibi, sitenizi inceledim.\\n\\nBen Akın Coşkun, ücretsiz araçlar geliştiriyorum.\\n\\nİhtiyacınıza uyuyor mu?",
               "language": "%s",
               "personalization_signals": ["industry_mentioned", "language_match"],
               "highlighted_products": ["ai-chatbot-platform"],
@@ -90,8 +91,10 @@ class WriterServiceTest {
 
         assertThat(draft.getStatus()).isEqualTo(DraftStatus.PENDING);
         assertThat(draft.getLanguage()).isEqualTo("tr");
-        assertThat(draft.getBodyHtml()).contains("Istanbul, Turkey");
-        assertThat(draft.getBodyHtml()).doesNotContain("{{PHYSICAL_ADDRESS}}");
+        // Writer body is pure content — no footer markers, no leaked placeholders.
+        assertThat(draft.getBodyHtml()).doesNotContain("{{");
+        assertThat(draft.getBodyHtml()).doesNotContain("<hr");
+        assertThat(draft.getBodyHtml()).doesNotContain("unsubscribe");
     }
 
     private Company propertyMgmtCompanyWithMatch() {
@@ -171,8 +174,8 @@ class WriterServiceTest {
         String json = """
             {
               "subject": "Restoranlar için ücretsiz AI araçları",
-              "body_html": "<p>Bkz [AI Chatbot Platform](https://chatbot-web-peach.vercel.app/) aracı.</p><hr><p>{{PHYSICAL_ADDRESS}}</p><a href=\\"{{UNSUBSCRIBE_URL}}\\">Unsubscribe</a>",
-              "body_text": "Bkz https://chatbot-web-peach.vercel.app/\\n\\n---\\n{{PHYSICAL_ADDRESS}}\\n{{UNSUBSCRIBE_URL}}",
+              "body_html": "<p>Bkz [AI Chatbot Platform](https://chatbot-web-peach.vercel.app/) aracı.</p>",
+              "body_text": "Bkz https://chatbot-web-peach.vercel.app/",
               "language": "tr",
               "personalization_signals": ["industry_mentioned"],
               "highlighted_products": ["ai-chatbot-platform"],

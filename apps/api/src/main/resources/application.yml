@@ -44,6 +44,11 @@ spring:
           starttls:
             enable: true
             required: true
+          # Fail-fast instead of the default -1 (infinite) wait. Render free tier
+          # outbound to Gmail occasionally stalls; 15s surfaces a clear error.
+          connectiontimeout: 15000
+          timeout: 15000
+          writetimeout: 15000
         transport:
           protocol: smtp
 

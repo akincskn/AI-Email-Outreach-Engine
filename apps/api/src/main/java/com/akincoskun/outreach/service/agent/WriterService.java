@@ -146,8 +146,13 @@ public class WriterService {
         - Brief Akın intro
         - The primary product with its EXACT primary_product.url, tied to the pain
         - The portfolio link using the EXACT sender.portfolio_url
-        - Soft closing question + signature (sender.name, sender.github_url)
-        - <hr> then physical address {{PHYSICAL_ADDRESS}} and unsubscribe {{UNSUBSCRIBE_URL}}
+        - Soft closing question
+
+        FOOTER — DO NOT WRITE ONE. Do not add any signature, sender name, GitHub
+        link, physical address, <hr>, or unsubscribe link. The system appends the
+        footer (signature + address + unsubscribe) automatically after you. If you
+        add one yourself the email will show a DUPLICATE footer. End the body with
+        the soft closing question.
 
         Refer to the primary product by its NAME in the sentence (e.g. "KolayAidat'ı
         geliştirdim"), and put its full https:// URL in the anchor href. Do not
@@ -244,8 +249,11 @@ public class WriterService {
         - Brief Akin intro
         - 1-2 highlighted products with links
         - Full portfolio link
-        - Soft closing question + signature
-        - <hr> followed by physical address {{PHYSICAL_ADDRESS}} and unsubscribe {{UNSUBSCRIBE_URL}}
+        - Soft closing question
+
+        FOOTER — DO NOT WRITE ONE. Do not add any signature, sender name, physical
+        address, <hr>, or unsubscribe link. The system appends the footer
+        automatically; adding one yourself causes a DUPLICATE footer.
 
         OUTPUT FORMAT — Return ONLY a valid JSON object:
         {
@@ -281,9 +289,6 @@ public class WriterService {
     private final LlmRouter llmRouter;
     private final EmailDraftRepository emailDraftRepository;
     private final ObjectMapper objectMapper;
-
-    @Value("${app.sender.physical-address}")
-    private String physicalAddress;
 
     @Value("${app.sender.from-name}")
     private String senderName;
@@ -362,8 +367,10 @@ public class WriterService {
                                   String promptVersion, Map<String, Object> match) {
         Map<String, Object> result = parseJson(rawJson);
 
-        String bodyHtml = cleanAnchorText(convertMarkdownLinks(injectFooter((String) result.get("body_html"))));
-        String bodyText = injectFooter((String) result.get("body_text"));
+        // Footer (signature + address + unsubscribe) is appended by SmtpService,
+        // NOT the Writer — keeps it deterministic and avoids a duplicate footer.
+        String bodyHtml = cleanAnchorText(convertMarkdownLinks((String) result.get("body_html")));
+        String bodyText = result.get("body_text") != null ? (String) result.get("body_text") : "";
 
         String primaryProductSlug = match != null ? (String) match.get("primary_product_slug") : null;
         validateContent(result, bodyHtml, bodyText, primaryProductSlug);
@@ -414,13 +421,6 @@ public class WriterService {
             return BigDecimal.valueOf(number.doubleValue()).setScale(2, RoundingMode.HALF_UP);
         }
         return null;
-    }
-
-    private String injectFooter(String content) {
-        if (content == null) return "";
-        return content
-            .replace("{{PHYSICAL_ADDRESS}}", physicalAddress)
-            .replace("{{UNSUBSCRIBE_URL}}", "/unsubscribe?token=PLACEHOLDER");
     }
 
     /**
