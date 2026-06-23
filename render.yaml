@@ -56,6 +56,14 @@ services:
       - key: GOOGLE_MAPS_API_KEY
         sync: false
 
+      # Discovery — Apify (second company data source; unset => OSM-only)
+      - key: APIFY_API_TOKEN
+        sync: false
+      - key: APIFY_GOOGLE_MAPS_ACTOR
+        value: compass~crawler-google-places
+      - key: APIFY_MAX_PLACES
+        value: "20"
+
       # Sender (CAN-SPAM)
       - key: SENDER_PHYSICAL_ADDRESS
         sync: false
