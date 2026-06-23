@@ -84,7 +84,7 @@ app:
     api-key: ${API_KEY:dev-api-key-change-in-production-32chars}
 
   sender:
-    physical-address: ${SENDER_PHYSICAL_ADDRESS:Your Address Here}
+    physical-address: ${SENDER_PHYSICAL_ADDRESS:Sarıyer, Pınar Mahallesi, Dut Sokak No:15, İstanbul, Türkiye}
     from-name: ${MAIL_FROM_NAME:Akın Coşkun}
     from-email: ${MAIL_FROM:test@localhost}
     portfolio-url: ${SENDER_PORTFOLIO:https://akin-coskun.web.app}

@@ -21,6 +21,9 @@ public class SmtpService {
     @Value("${app.sender.from-email}")
     private String fromEmail;
 
+    @Value("${app.sender.physical-address}")
+    private String physicalAddress;
+
     @Value("${app.test.recipient-override:}")
     private String testRecipientOverride;
 
@@ -39,8 +42,14 @@ public class SmtpService {
             helper.setTo(actualRecipient);
             helper.setSubject(subject);
 
-            String htmlWithPixel = bodyHtml + buildTrackingPixel(trackingPixelUrl);
-            helper.setText(bodyText, htmlWithPixel);
+            // KVKK + CAN-SPAM: visible footer (physical address + clickable
+            // unsubscribe) is required in the body. List-Unsubscribe header
+            // alone is insufficient for all clients.
+            String htmlWithFooter = bodyHtml
+                + buildFooter(unsubscribeUrl)
+                + buildTrackingPixel(trackingPixelUrl);
+            String textWithFooter = buildTextWithFooter(bodyText, unsubscribeUrl);
+            helper.setText(textWithFooter, htmlWithFooter);
 
             msg.setHeader("Message-ID", "<" + messageId + ">");
             msg.setHeader("List-Unsubscribe",
@@ -79,6 +88,25 @@ public class SmtpService {
 
     private boolean isTestOverrideActive() {
         return testRecipientOverride != null && !testRecipientOverride.isBlank();
+    }
+
+    private String buildFooter(String unsubscribeUrl) {
+        return """
+            <hr style="border:none;border-top:1px solid #ddd;margin:20px 0">
+            <p style="font-size:12px;color:#666;line-height:1.4">
+              %s<br>
+              %s
+            </p>
+            <p style="font-size:12px;color:#666">
+              Bu mailleri almak istemiyorsanız \
+            <a href="%s" style="color:#666">buraya tıklayarak</a> abone listemden çıkabilirsiniz.
+            </p>
+            """.formatted(fromName, physicalAddress, unsubscribeUrl);
+    }
+
+    private String buildTextWithFooter(String bodyText, String unsubscribeUrl) {
+        return bodyText + "\n\n---\n" + fromName + "\n" + physicalAddress
+            + "\n\nAbone olmak istemiyorsanız: " + unsubscribeUrl;
     }
 
     private String buildTrackingPixel(String url) {
