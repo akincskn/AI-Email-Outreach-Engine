@@ -40,11 +40,31 @@ public class EmailExtractionService {
     private static final Pattern PERSONAL_PATTERN =
         Pattern.compile("^[a-z]+[._-][a-z]+@", Pattern.CASE_INSENSITIVE);
 
+    /**
+     * Placeholder/reserved domains that must never become recipients (Görev 12).
+     * Scrapers occasionally surface emails like {@code info@example.com} from a
+     * site's boilerplate; sending there is pointless and harms deliverability.
+     */
+    private static final Set<String> RESERVED_DOMAINS = Set.of(
+        "example.com", "example.org", "example.net",
+        "test.com", "test.org", "domain.com",
+        "localhost", "invalid"
+    );
+
     private final EmailAccountRepository emailAccountRepository;
     private final CompanyRepository companyRepository;
 
     @Transactional
     public List<EmailAccount> extractAndSave(Company company) {
+        // Recipient guard: a reserved/placeholder company domain yields no valid
+        // address — skip scraping entirely so the pipeline counts it as no-email.
+        if (company.getDomain() != null && RESERVED_DOMAINS.contains(company.getDomain().toLowerCase())) {
+            log.info("Company '{}': reserved domain, skipping email extraction", company.getDomain());
+            company.setStatus(CompanyStatus.NEW);
+            companyRepository.save(company);
+            return List.of();
+        }
+
         String baseUrl = resolveBaseUrl(company);
         List<String> urlsToScrape = List.of(
             baseUrl,
@@ -70,7 +90,10 @@ public class EmailExtractionService {
 
         List<EmailAccount> saved = new ArrayList<>();
         for (String email : foundEmails) {
-            String prefix = email.split("@")[0].toLowerCase();
+            String[] parts = email.split("@");
+            String prefix = parts[0].toLowerCase();
+            String domain = parts.length > 1 ? parts[1].toLowerCase() : "";
+            if (RESERVED_DOMAINS.contains(domain)) continue;
             if (!GENERIC_PREFIXES.contains(prefix)) continue;
             if (PERSONAL_PATTERN.matcher(email).find()) continue;
             if (emailAccountRepository.existsByCompanyIdAndEmail(company.getId(), email)) continue;

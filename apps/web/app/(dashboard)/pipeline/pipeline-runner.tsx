@@ -6,19 +6,27 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Play } from "lucide-react";
+import { Loader2, Play, Rocket } from "lucide-react";
 import type { DiscoveryFilter } from "@/lib/types";
-import { runPipeline, type PipelineRunResult } from "./actions";
+import {
+  runPipeline,
+  runAllPipelines,
+  type PipelineRunResult,
+  type RunAllResult,
+} from "./actions";
 
 export function PipelineRunner({ filters }: { filters: DiscoveryFilter[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [runningAll, setRunningAll] = useState(false);
   const [lastResult, setLastResult] = useState<PipelineRunResult | null>(null);
+  const [runAllResult, setRunAllResult] = useState<RunAllResult | null>(null);
 
   function handleRun(filterId: string) {
     setRunningId(filterId);
     setLastResult(null);
+    setRunAllResult(null);
     startTransition(async () => {
       try {
         const result = await runPipeline(filterId);
@@ -42,8 +50,103 @@ export function PipelineRunner({ filters }: { filters: DiscoveryFilter[] }) {
     });
   }
 
+  function handleRunAll() {
+    setRunningAll(true);
+    setLastResult(null);
+    setRunAllResult(null);
+    startTransition(async () => {
+      try {
+        const result = await runAllPipelines();
+        setRunAllResult(result);
+        toast.success(
+          `${result.totalFilters} filtre çalıştı, ${result.totalDrafts} taslak oluşturuldu`,
+          {
+            description:
+              result.totalDrafts > 0 ? "Taslakları incelemek için tıklayın" : undefined,
+            action:
+              result.totalDrafts > 0
+                ? { label: "Taslaklar", onClick: () => router.push("/drafts") }
+                : undefined,
+          }
+        );
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Pipeline çalıştırılamadı");
+      } finally {
+        setRunningAll(false);
+      }
+    });
+  }
+
   return (
     <div className="space-y-4">
+      <Card className="p-4 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-medium text-sm">Tüm aktif filtreleri çalıştır</p>
+          <p className="text-xs text-muted-foreground">
+            {filters.length} aktif filtre sırayla çalışır. Her filtre günlük kotasıyla
+            sınırlıdır (taslak sayısı kontrollü kalır). Birkaç dakika sürebilir.
+          </p>
+        </div>
+        <Button
+          size="lg"
+          onClick={handleRunAll}
+          disabled={isPending}
+          className="shrink-0"
+        >
+          {runningAll ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Çalışıyor…
+            </>
+          ) : (
+            <>
+              <Rocket className="h-4 w-4" />
+              Run All Active Filters
+            </>
+          )}
+        </Button>
+      </Card>
+
+      {runAllResult && (
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium">Toplu çalıştırma sonucu</h2>
+            <span className="text-xs text-muted-foreground">
+              {(runAllResult.durationMs / 1000).toFixed(1)} sn
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+            <Stat label="Filtre" value={runAllResult.totalFilters} />
+            <Stat label="Bulundu" value={runAllResult.totalDiscovered} />
+            <Stat label="Taslak" value={runAllResult.totalDrafts} highlight />
+            <Stat label="Kota doldu" value={runAllResult.totalQuotaReached} />
+            <Stat label="Hata" value={runAllResult.totalErrors} warn={runAllResult.totalErrors > 0} />
+          </div>
+          <div className="space-y-1">
+            {runAllResult.perFilter.map((r) => (
+              <div
+                key={r.filterId}
+                className="flex items-center justify-between rounded-md border px-3 py-2 text-xs"
+              >
+                <span className="font-medium truncate">{r.filterName}</span>
+                <span className="text-muted-foreground shrink-0">
+                  {r.error
+                    ? `Hata: ${r.error}`
+                    : r.quotaReached
+                      ? "Günlük kota dolu"
+                      : `${r.draftsCreated} taslak · ${r.newCompanies} yeni şirket`}
+                </span>
+              </div>
+            ))}
+          </div>
+          {runAllResult.totalDrafts > 0 && (
+            <Button variant="outline" size="sm" onClick={() => router.push("/drafts")}>
+              Taslakları İncele
+            </Button>
+          )}
+        </Card>
+      )}
+
       <div className="space-y-2">
         {filters.map((f) => {
           const running = isPending && runningId === f.id;

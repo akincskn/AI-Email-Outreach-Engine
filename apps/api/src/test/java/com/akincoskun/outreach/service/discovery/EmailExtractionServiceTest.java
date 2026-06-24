@@ -59,6 +59,22 @@ class EmailExtractionServiceTest {
     }
 
     @Test
+    void reservedDomain_skipsExtractionEntirely() {
+        // example.com is a placeholder domain — must never be scraped or emailed.
+        Company company = Company.builder()
+            .domain("example.com").name("Example").source("manual_csv")
+            .status(CompanyStatus.NEW).build();
+        when(companyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        java.util.List<EmailAccount> result = service.extractAndSave(company);
+
+        assertThat(result).isEmpty();
+        // No address was persisted — the guard short-circuits before any save.
+        verify(emailAccountRepository, never()).save(any());
+        assertThat(company.getStatus()).isEqualTo(CompanyStatus.NEW);
+    }
+
+    @Test
     void skipsDuplicateEmailsForCompany() {
         Company company = testCompany();
         when(companyRepository.save(any())).thenReturn(company);

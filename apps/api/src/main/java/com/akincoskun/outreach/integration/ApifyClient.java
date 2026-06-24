@@ -14,9 +14,11 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -41,6 +43,9 @@ public class ApifyClient implements CompanyDataSource {
     /** Matches {@code ...&query_place_id=ChIJ...} in a Google Maps place URL. */
     private static final Pattern PLACE_ID_PARAM = Pattern.compile("query_place_id=([^&]+)");
 
+    /** Polite pause between successive Apify calls in a multi-search run. */
+    private static final long INTER_CALL_PAUSE_MS = 1000L;
+
     private final WebClient webClient;
     private final String apiToken;
     private final String actorId;
@@ -51,7 +56,7 @@ public class ApifyClient implements CompanyDataSource {
         @Value("${app.apify.api-token:}") String apiToken,
         @Value("${app.apify.google-maps-actor:compass~crawler-google-places}") String actorId,
         @Value("${app.apify.timeout-seconds:120}") int timeoutSeconds,
-        @Value("${app.apify.max-places-per-search:20}") int maxPlacesPerSearch
+        @Value("${app.apify.max-places-per-search:50}") int maxPlacesPerSearch
     ) {
         this.apiToken = apiToken;
         this.actorId = actorId;
@@ -68,6 +73,12 @@ public class ApifyClient implements CompanyDataSource {
         return "apify";
     }
 
+    /**
+     * Fans out over {@code keywords × cities} (Görev 12), deduping places by
+     * their stable id across all sub-searches. Bounded by
+     * {@link DiscoveryQuery#effectiveMaxTotalPlaces()} so a wide filter cannot
+     * burn the Apify free tier: once the cap is hit we stop making calls.
+     */
     @Override
     public List<DiscoveredPlace> search(DiscoveryQuery query) {
         if (apiToken == null || apiToken.isBlank()) {
@@ -75,6 +86,40 @@ public class ApifyClient implements CompanyDataSource {
             return Collections.emptyList();
         }
 
+        List<String> keywords = query.effectiveKeywords();
+        List<String> cities = query.effectiveCities();
+        int maxTotal = query.effectiveMaxTotalPlaces();
+
+        List<DiscoveredPlace> allPlaces = new ArrayList<>();
+        Set<String> seenIds = new HashSet<>();
+
+        outer:
+        for (String keyword : keywords) {
+            for (String city : cities) {
+                if (allPlaces.size() >= maxTotal) break outer;
+
+                DiscoveryQuery sub =
+                    new DiscoveryQuery(query.industry(), query.countryCode(), city, keyword);
+                for (DiscoveredPlace place : singleSearch(sub)) {
+                    // Dedup across sub-searches; the same place can match several
+                    // keywords or sit on a city boundary.
+                    String dedupKey = place.osmId() != null ? place.osmId() : place.name();
+                    if (seenIds.add(dedupKey)) {
+                        allPlaces.add(place);
+                        if (allPlaces.size() >= maxTotal) break;
+                    }
+                }
+                pauseBetweenCalls();
+            }
+        }
+
+        log.info("Apify multi-search returned {} unique place(s) across {} keyword(s) × {} city(ies)",
+            allPlaces.size(), keywords.size(), cities.size());
+        return allPlaces;
+    }
+
+    /** One actor run for a single keyword+city. Never throws — empty on error. */
+    private List<DiscoveredPlace> singleSearch(DiscoveryQuery query) {
         Map<String, Object> input = buildInput(query);
         log.info("Apify search: '{}' in '{}'", input.get("searchStringsArray"), input.get("locationQuery"));
 
@@ -96,9 +141,16 @@ public class ApifyClient implements CompanyDataSource {
             .timeout(Duration.ofSeconds(timeoutSeconds + 60L))
             .block();
 
-        List<DiscoveredPlace> places = parse(items);
-        log.info("Apify returned {} place(s)", places.size());
-        return places;
+        return parse(items);
+    }
+
+    /** Respects Apify rate limits between sub-searches; interrupt-safe. */
+    private void pauseBetweenCalls() {
+        try {
+            Thread.sleep(INTER_CALL_PAUSE_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** Builds the actor input JSON. Paid enrichments are OFF to save credits. */

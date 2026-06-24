@@ -86,7 +86,10 @@ export interface DiscoveryFilter {
   industry: string | null;
   countryCode: string | null;
   city: string | null;
+  cities: string[] | null;
   keywords: string[];
+  targetProduct: string | null;
+  dailyQuota: number;
   active: boolean;
   createdAt: string;
 }

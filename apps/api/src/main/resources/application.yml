@@ -127,7 +127,7 @@ app:
     api-token: ${APIFY_API_TOKEN:}
     google-maps-actor: ${APIFY_GOOGLE_MAPS_ACTOR:compass~crawler-google-places}
     timeout-seconds: ${APIFY_TIMEOUT_SECONDS:120}
-    max-places-per-search: ${APIFY_MAX_PLACES:20}
+    max-places-per-search: ${APIFY_MAX_PLACES:50}
 
   slack:
     webhook-url: ${SLACK_WEBHOOK_URL:}

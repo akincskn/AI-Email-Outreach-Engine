@@ -6,8 +6,10 @@ import com.akincoskun.outreach.domain.DiscoveryFilter;
 import com.akincoskun.outreach.domain.EmailAccount;
 import com.akincoskun.outreach.dto.MatchResult;
 import com.akincoskun.outreach.dto.PipelineRunResult;
+import com.akincoskun.outreach.dto.RunAllResult;
 import com.akincoskun.outreach.exception.ResourceNotFoundException;
 import com.akincoskun.outreach.repository.DiscoveryFilterRepository;
+import com.akincoskun.outreach.repository.EmailDraftRepository;
 import com.akincoskun.outreach.service.agent.AnalyzerService;
 import com.akincoskun.outreach.service.agent.MatcherService;
 import com.akincoskun.outreach.service.agent.WriterService;
@@ -17,6 +19,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,12 +42,49 @@ import java.util.UUID;
 @Slf4j
 public class PipelineOrchestratorService {
 
+    /** All quota math is done against the Istanbul calendar day (Akın's timezone). */
+    private static final ZoneId TZ = ZoneId.of("Europe/Istanbul");
+
     private final DiscoveryFilterRepository discoveryFilterRepository;
+    private final EmailDraftRepository emailDraftRepository;
     private final CompanyDiscoveryService companyDiscoveryService;
     private final EmailExtractionService emailExtractionService;
     private final AnalyzerService analyzerService;
     private final MatcherService matcherService;
     private final WriterService writerService;
+
+    /**
+     * Görev 12 — runs every active filter in turn, isolating failures so one bad
+     * filter cannot abort the rest, and returns an aggregate summary. Quota is
+     * enforced per filter inside {@link #runForFilter}.
+     */
+    public RunAllResult runAllActive() {
+        long start = System.currentTimeMillis();
+        List<DiscoveryFilter> activeFilters = discoveryFilterRepository.findAllByActiveTrue();
+        log.info("Run-All START: {} active filter(s)", activeFilters.size());
+
+        List<PipelineRunResult> results = new ArrayList<>();
+        for (DiscoveryFilter filter : activeFilters) {
+            try {
+                results.add(runForFilter(filter.getId()));
+            } catch (Exception e) {
+                log.error("Run-All: filter '{}' failed", filter.getName(), e);
+                results.add(PipelineRunResult.failed(filter, e.getMessage()));
+            }
+        }
+
+        int totalDiscovered = results.stream().mapToInt(PipelineRunResult::discovered).sum();
+        int totalDrafts = results.stream().mapToInt(PipelineRunResult::draftsCreated).sum();
+        int totalQuotaReached = (int) results.stream().filter(PipelineRunResult::quotaReached).count();
+        int totalErrors = (int) results.stream().filter(r -> r.error() != null).count();
+        long durationMs = System.currentTimeMillis() - start;
+
+        RunAllResult summary = new RunAllResult(
+            activeFilters.size(), totalDiscovered, totalDrafts,
+            totalQuotaReached, totalErrors, durationMs, results);
+        log.info("Run-All DONE: {}", summary);
+        return summary;
+    }
 
     public PipelineRunResult runForFilter(UUID filterId) {
         long start = System.currentTimeMillis();
@@ -51,6 +93,16 @@ public class PipelineOrchestratorService {
             .orElseThrow(() -> new ResourceNotFoundException("DiscoveryFilter", filterId));
 
         log.info("Pipeline START filter='{}' ({})", filter.getName(), filterId);
+
+        // Daily quota gate: count drafts already created for this filter today and
+        // bail before any (paid) discovery if the cap is met.
+        long draftsCreatedToday = countDraftsToday(filter.getId());
+        if (draftsCreatedToday >= filter.getDailyQuota()) {
+            log.info("Filter '{}' quota reached today ({}/{}), skipping",
+                filter.getName(), draftsCreatedToday, filter.getDailyQuota());
+            return PipelineRunResult.quotaReached(filter);
+        }
+        int remainingSlots = (int) (filter.getDailyQuota() - draftsCreatedToday);
 
         CompanyDiscoveryService.DiscoveryOutcome discovery =
             companyDiscoveryService.discoverFromFilterDetailed(filter);
@@ -62,6 +114,12 @@ public class PipelineOrchestratorService {
         int errors = 0;
 
         for (Company company : discovery.newCompanies()) {
+            // Respect the remaining daily quota: once filled, stop writing drafts.
+            if (draftsCreated >= remainingSlots) {
+                log.info("Pipeline '{}': daily quota slots filled ({}), stopping draft creation",
+                    filter.getName(), remainingSlots);
+                break;
+            }
             try {
                 // a. Emails — no generic address means nothing to send to.
                 List<EmailAccount> accounts = emailExtractionService.extractAndSave(company);
@@ -111,9 +169,20 @@ public class PipelineOrchestratorService {
             skippedNoMatch,
             draftsCreated,
             errors,
-            durationMs
+            durationMs,
+            false,
+            null
         );
         log.info("Pipeline DONE filter='{}': {}", filter.getName(), result);
         return result;
+    }
+
+    /** Drafts created for {@code filterId} within today's Istanbul calendar day. */
+    private long countDraftsToday(UUID filterId) {
+        LocalDate today = LocalDate.now(TZ);
+        return emailDraftRepository.countByCompany_DiscoveryFilterIdAndCreatedAtBetween(
+            filterId,
+            today.atStartOfDay(TZ).toInstant(),
+            today.plusDays(1).atStartOfDay(TZ).toInstant());
     }
 }

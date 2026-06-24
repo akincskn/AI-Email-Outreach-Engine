@@ -32,10 +32,31 @@ public class DiscoveryFilter {
     @Column(length = 2)
     private String countryCode;
 
+    /**
+     * Single city — DEPRECATED in favour of {@link #cities} (Görev 12). Kept for
+     * backward compatibility: OSM discovery still keys off it. New filters should
+     * populate {@code cities} instead.
+     */
     private String city;
+
+    /**
+     * Cities to search in one run (Görev 12 — Apify multi-city scale). Persisted
+     * as PostgreSQL {@code TEXT[]}. Falls back to {@link #city} when null/empty.
+     */
+    @Column(name = "cities", columnDefinition = "TEXT[]")
+    private List<String> cities;
 
     @Column(columnDefinition = "TEXT[]")
     private List<String> keywords;
+
+    /**
+     * Max new drafts this filter may produce per day (Görev 12). The pipeline
+     * orchestrator counts today's drafts per filter and stops at this cap so the
+     * "Run All" button cannot exceed the Gmail-safe daily volume.
+     */
+    @Column(name = "daily_quota", nullable = false)
+    @Builder.Default
+    private int dailyQuota = 4;
 
     /**
      * Product slug this filter biases the Matcher toward (Görev 4). Nullable for

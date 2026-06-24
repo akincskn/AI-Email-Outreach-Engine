@@ -16,6 +16,18 @@ export interface PipelineRunResult {
   draftsCreated: number;
   errors: number;
   durationMs: number;
+  quotaReached: boolean;
+  error: string | null;
+}
+
+export interface RunAllResult {
+  totalFilters: number;
+  totalDiscovered: number;
+  totalDrafts: number;
+  totalQuotaReached: number;
+  totalErrors: number;
+  durationMs: number;
+  perFilter: PipelineRunResult[];
 }
 
 export async function runPipeline(filterId: string): Promise<PipelineRunResult> {
@@ -26,6 +38,15 @@ export async function runPipeline(filterId: string): Promise<PipelineRunResult> 
     `/api/v1/pipeline/run/${filterId}`,
     {}
   );
+  revalidatePath("/drafts");
+  revalidatePath("/companies");
+  return result;
+}
+
+export async function runAllPipelines(): Promise<RunAllResult> {
+  // Runs every active filter back-to-back on the backend (each quota-capped).
+  // Can take several minutes; the daily quota keeps the total draft count bounded.
+  const result = await api.post<RunAllResult>("/api/v1/pipeline/run-all", {});
   revalidatePath("/drafts");
   revalidatePath("/companies");
   return result;

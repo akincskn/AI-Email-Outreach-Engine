@@ -27,6 +27,9 @@ import java.util.Map;
 @Slf4j
 public class CompanyDiscoveryService {
 
+    /** Cap on places returned per filter run, regardless of keyword×city fan-out. */
+    private static final int MAX_TOTAL_PLACES_PER_RUN = 100;
+
     private final CompanyRepository companyRepository;
     private final DiscoveredSkippedRepository discoveredSkippedRepository;
     /** All registered providers, keyed by Spring bean name (e.g. {@code osmClient}). */
@@ -78,7 +81,10 @@ public class CompanyDiscoveryService {
             filter.getIndustry(),
             filter.getCountryCode(),
             filter.getCity(),
-            firstKeyword(filter)
+            firstKeyword(filter),
+            filter.getCities(),
+            filter.getKeywords(),
+            MAX_TOTAL_PLACES_PER_RUN
         );
 
         List<CompanyDataSource.DiscoveredPlace> places = source.search(query);
@@ -118,6 +124,7 @@ public class CompanyDiscoveryService {
                 .discoveredAt(Instant.now())
                 .countryCode(filter.getCountryCode())
                 .city(filter.getCity())
+                .discoveryFilterId(filter.getId())
                 .status(CompanyStatus.NEW)
                 .build();
             newCompanies.add(companyRepository.save(company));

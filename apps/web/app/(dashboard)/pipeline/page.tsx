@@ -7,8 +7,11 @@ export default async function PipelinePage() {
   let filters: DiscoveryFilter[] = [];
   try {
     filters = await api.get<DiscoveryFilter[]>("/api/v1/discovery-filters/active");
-  } catch {
-    /* API not reachable */
+  } catch (e) {
+    // Don't swallow silently: an auth/connectivity failure here looks identical
+    // to "no active filters" in the UI. Log it server-side so a 401 (e.g. the
+    // backend's API_KEY drifting out of sync with the frontend's) is diagnosable.
+    console.error("[pipeline] failed to load active discovery filters:", e);
   }
 
   return (

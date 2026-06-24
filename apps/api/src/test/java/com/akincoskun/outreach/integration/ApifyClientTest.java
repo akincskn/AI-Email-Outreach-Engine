@@ -156,4 +156,21 @@ class ApifyClientTest {
         ApifyClient noToken = new ApifyClient("", "actor", 120, 20);
         assertThat(noToken.search(new DiscoveryQuery("x", "TR", "İstanbul", "y"))).isEmpty();
     }
+
+    @Test
+    void discoveryQueryFansOutOverCitiesAndKeywordsWithFallbacks() {
+        // Multi-search query: cities/keywords drive the fan-out (Görev 12).
+        DiscoveryQuery multi = new DiscoveryQuery("property_management", "TR", "İstanbul",
+            "apartman yönetimi", List.of("İstanbul", "Ankara"),
+            List.of("apartman yönetimi", "site yönetimi"), 80);
+        assertThat(multi.effectiveCities()).containsExactly("İstanbul", "Ankara");
+        assertThat(multi.effectiveKeywords()).containsExactly("apartman yönetimi", "site yönetimi");
+        assertThat(multi.effectiveMaxTotalPlaces()).isEqualTo(80);
+
+        // Single-search query: lists fall back to the single city/keyword, cap to 100.
+        DiscoveryQuery single = new DiscoveryQuery("restaurant", "TR", "Ankara", "restoran");
+        assertThat(single.effectiveCities()).containsExactly("Ankara");
+        assertThat(single.effectiveKeywords()).containsExactly("restoran");
+        assertThat(single.effectiveMaxTotalPlaces()).isEqualTo(100);
+    }
 }

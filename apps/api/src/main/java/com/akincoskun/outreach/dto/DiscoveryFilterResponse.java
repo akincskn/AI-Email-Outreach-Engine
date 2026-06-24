@@ -10,8 +10,10 @@ public record DiscoveryFilterResponse(
     String industry,
     String countryCode,
     String city,
+    List<String> cities,
     List<String> keywords,
     String targetProduct,
+    int dailyQuota,
     boolean active,
     Instant createdAt
 ) {}

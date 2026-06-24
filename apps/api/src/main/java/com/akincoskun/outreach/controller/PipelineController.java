@@ -1,6 +1,7 @@
 package com.akincoskun.outreach.controller;
 
 import com.akincoskun.outreach.dto.PipelineRunResult;
+import com.akincoskun.outreach.dto.RunAllResult;
 import com.akincoskun.outreach.service.PipelineOrchestratorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -26,5 +27,14 @@ public class PipelineController {
     @PostMapping("/run/{filterId}")
     public ResponseEntity<PipelineRunResult> runPipeline(@PathVariable UUID filterId) {
         return ResponseEntity.ok(pipelineOrchestratorService.runForFilter(filterId));
+    }
+
+    /**
+     * Görev 12 — "Run All Active" button. Runs every active filter (quota-capped)
+     * and returns the aggregate summary plus per-filter results.
+     */
+    @PostMapping("/run-all")
+    public ResponseEntity<RunAllResult> runAll() {
+        return ResponseEntity.ok(pipelineOrchestratorService.runAllActive());
     }
 }

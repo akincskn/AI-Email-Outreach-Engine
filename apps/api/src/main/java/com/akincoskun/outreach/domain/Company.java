@@ -8,6 +8,7 @@ import org.hibernate.annotations.Type;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 @Entity
 @Table(name = "companies")
@@ -41,6 +42,14 @@ public class Company extends BaseEntity {
     private String countryCode;
 
     private String city;
+
+    /**
+     * The discovery filter that found this company (Görev 12). Used to attribute
+     * drafts to a filter for daily-quota counting. A plain id (not a relation) to
+     * avoid lazy-load overhead; null for companies discovered before V24.
+     */
+    @Column(name = "discovery_filter_id")
+    private UUID discoveryFilterId;
 
     @Type(JsonBinaryType.class)
     @Column(columnDefinition = "jsonb")
