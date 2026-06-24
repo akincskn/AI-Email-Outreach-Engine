@@ -107,6 +107,18 @@ public class MatcherService {
 
         MatchResult result = toResult(parsed);
 
+        // DEBUG visibility for skippedNoMatch investigation (Görev 12 follow-up):
+        // shows whether a skip is "below threshold" or "off-target" and exactly what
+        // slug/confidence the AI returned against the filter's bias hint.
+        if (log.isDebugEnabled()) {
+            log.debug("Matcher raw for '{}': {}", company.getDomain(), rawJson);
+            log.debug("Matcher decision for '{}': primary={} conf={} secondary={} conf={} "
+                    + "matched={} bias={} (threshold={})",
+                company.getDomain(), result.primaryProductSlug(), result.primaryConfidence(),
+                result.secondaryProductSlug(), result.secondaryConfidence(), result.matched(),
+                biasProductSlug, CONFIDENCE_THRESHOLD);
+        }
+
         // Strict targetProduct enforcement: when the discovery filter declares a
         // targetProduct, the AI's primary pick MUST equal it. A confident match
         // on a DIFFERENT product is strategically wrong (e.g. a coworking firm

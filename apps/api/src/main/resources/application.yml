@@ -13,6 +13,16 @@ spring:
       maximum-pool-size: 10
       minimum-idle: 2
       connection-timeout: 30000
+      # Neon free tier is serverless and drops idle connections (~5 min). Without
+      # validation, HikariCP hands out a dead connection and the first query of a
+      # run fails with "terminating connection due to administrator command".
+      # keepalive pings below the idle window keep pooled connections alive, and
+      # connection-test-query validates one before it leaves the pool.
+      connection-test-query: SELECT 1
+      validation-timeout: 5000
+      idle-timeout: 60000
+      max-lifetime: 300000
+      keepalive-time: 60000
 
   jpa:
     hibernate:
@@ -181,6 +191,10 @@ logging:
   level:
     root: WARN
     com.akincoskun.outreach: INFO
+    # Matcher decisions logged at DEBUG to investigate skippedNoMatch (Görev 12
+    # follow-up): shows below-threshold vs off-target and the AI's slug/confidence.
+    # Low volume (one per company); set MATCHER_LOG_LEVEL=INFO to quiet it later.
+    com.akincoskun.outreach.service.agent.MatcherService: ${MATCHER_LOG_LEVEL:DEBUG}
     org.hibernate.SQL: OFF
     org.hibernate.type.descriptor.sql: OFF
 

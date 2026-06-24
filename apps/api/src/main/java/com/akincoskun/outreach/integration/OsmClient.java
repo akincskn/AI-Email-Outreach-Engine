@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
@@ -40,6 +41,9 @@ public class OsmClient implements CompanyDataSource {
     /** Fallback selector when an industry slug has no explicit mapping. */
     private static final List<String> DEFAULT_TAGS = List.of("office=company");
 
+    /** WebClient default in-memory buffer is 256KB; large TR result sets blow past it. */
+    private static final int MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+
     private final WebClient webClient;
     private final long minIntervalMs;
     private final int timeoutSeconds;
@@ -54,7 +58,14 @@ public class OsmClient implements CompanyDataSource {
     ) {
         this.minIntervalMs = minIntervalMs;
         this.timeoutSeconds = timeoutSeconds;
-        this.webClient = WebClient.builder().baseUrl(baseUrl).build();
+        // Raise the buffer to 10MB: some Türkiye queries (e-commerce, forms) return
+        // >256KB and the default codec limit fails them with DataBufferLimitException.
+        this.webClient = WebClient.builder()
+            .baseUrl(baseUrl)
+            .exchangeStrategies(ExchangeStrategies.builder()
+                .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(MAX_BUFFER_BYTES))
+                .build())
+            .build();
     }
 
     @Override
