@@ -54,17 +54,39 @@ public class PipelineOrchestratorService {
     private final WriterService writerService;
 
     /**
+     * Reports progress between filters during a "Run All" so the async job's
+     * {@code progress_message} can show "Pipeline 3/5: TR Marketing Agencies".
+     */
+    @FunctionalInterface
+    public interface ProgressListener {
+        void onFilterStart(int index, int total, DiscoveryFilter filter);
+    }
+
+    /**
      * Görev 12 — runs every active filter in turn, isolating failures so one bad
      * filter cannot abort the rest, and returns an aggregate summary. Quota is
      * enforced per filter inside {@link #runForFilter}.
      */
     public RunAllResult runAllActive() {
+        return runAllActive(null);
+    }
+
+    /**
+     * Görev 10.2 — same as {@link #runAllActive()} but reports per-filter progress
+     * to {@code listener} (used by the async job to publish live status).
+     */
+    public RunAllResult runAllActive(ProgressListener listener) {
         long start = System.currentTimeMillis();
         List<DiscoveryFilter> activeFilters = discoveryFilterRepository.findAllByActiveTrue();
         log.info("Run-All START: {} active filter(s)", activeFilters.size());
 
         List<PipelineRunResult> results = new ArrayList<>();
-        for (DiscoveryFilter filter : activeFilters) {
+        int total = activeFilters.size();
+        for (int i = 0; i < total; i++) {
+            DiscoveryFilter filter = activeFilters.get(i);
+            if (listener != null) {
+                listener.onFilterStart(i, total, filter);
+            }
             try {
                 results.add(runForFilter(filter.getId()));
             } catch (Exception e) {
