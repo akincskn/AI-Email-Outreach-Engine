@@ -22,6 +22,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -162,6 +167,43 @@ class PipelineIntegrationTest {
         orchestrator.send(draft);
 
         assertThat(volumeLimiterService.getSentCountToday()).isEqualTo(before + 1);
+    }
+
+    /**
+     * Regression for the 2026-06-26 production race: parallel approvals all hit
+     * the find-or-create in VolumeLimiterService and tripped the
+     * volume_log_sent_date_key unique constraint, so 6 of 8 mails FAILED. With
+     * the atomic ON CONFLICT upsert, N concurrent increments must yield exactly
+     * one row whose sent_count == N, with zero failures.
+     */
+    @Test
+    void concurrentRecordSendIsAtomic() throws InterruptedException {
+        int threads = 10;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(threads);
+        AtomicInteger failures = new AtomicInteger(0);
+
+        for (int i = 0; i < threads; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();                 // release all at once for max contention
+                    volumeLimiterService.recordSend();
+                } catch (Exception e) {
+                    failures.incrementAndGet();
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        start.countDown();
+        assertThat(done.await(30, TimeUnit.SECONDS)).isTrue();
+        pool.shutdownNow();
+
+        assertThat(failures.get()).isZero();
+        assertThat(volumeLogRepository.findAll()).hasSize(1);
+        assertThat(volumeLimiterService.getSentCountToday()).isEqualTo(threads);
     }
 
     // ── Full Pipeline (mocked AI) ─────────────────────────────────────────────

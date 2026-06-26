@@ -21,6 +21,7 @@ public class VolumeLimiterService {
     @Value("${app.gmail.account-created-at}")
     private String accountCreatedAt;
 
+    @Transactional
     public boolean canSendNow() {
         VolumeLog today = getOrCreateToday();
         int cap = today.getDailyCap();
@@ -31,17 +32,23 @@ public class VolumeLimiterService {
         return today.getSentCount() < cap;
     }
 
+    /**
+     * Atomically increment today's send count. Delegates to a single
+     * PostgreSQL {@code ON CONFLICT} UPSERT so that parallel sends cannot
+     * race on row creation or lose increments (the duplicate-key / lost-update
+     * bug that failed 6 production mails on 2026-06-26).
+     */
     @Transactional
     public void recordSend() {
-        VolumeLog today = getOrCreateToday();
-        today.setSentCount(today.getSentCount() + 1);
-        volumeLogRepository.save(today);
+        volumeLogRepository.incrementSentCount(LocalDate.now(), computeCap());
     }
 
+    @Transactional
     public int getDailyCap() {
         return getOrCreateToday().getDailyCap();
     }
 
+    @Transactional
     public int getSentCountToday() {
         return getOrCreateToday().getSentCount();
     }
@@ -50,13 +57,10 @@ public class VolumeLimiterService {
         LocalDate today = LocalDate.now();
         return volumeLogRepository.findBySentDate(today)
             .orElseGet(() -> {
-                int cap = computeCap();
-                VolumeLog log = VolumeLog.builder()
-                    .sentDate(today)
-                    .sentCount(0)
-                    .dailyCap(cap)
-                    .build();
-                return volumeLogRepository.save(log);
+                volumeLogRepository.ensureExists(today, computeCap());
+                return volumeLogRepository.findBySentDate(today)
+                    .orElseThrow(() -> new IllegalStateException(
+                        "volume_log row missing after upsert for " + today));
             });
     }
 
