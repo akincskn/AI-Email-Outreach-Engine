@@ -55,10 +55,11 @@ spring:
             enable: true
             required: true
           # Fail-fast instead of the default -1 (infinite) wait. Render free tier
-          # outbound to Gmail occasionally stalls; 15s surfaces a clear error.
-          connectiontimeout: 15000
-          timeout: 15000
-          writetimeout: 15000
+          # cold start to Gmail can take >15s; 30s tolerates the cold start while
+          # still surfacing a clear error on a genuine stall.
+          connectiontimeout: 30000
+          timeout: 30000
+          writetimeout: 30000
         transport:
           protocol: smtp
 
@@ -80,6 +81,12 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  health:
+    # MailHealthIndicator opens an SMTP connection on every health ping. On Render
+    # free tier cold start that connect takes ~15s and flips /actuator/health to
+    # DOWN even though the app is fine. SMTP problems surface at send time anyway.
+    mail:
+      enabled: false
 
 springdoc:
   api-docs:

@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -27,6 +29,17 @@ public class SmtpService {
     @Value("${app.test.recipient-override:}")
     private String testRecipientOverride;
 
+    // send() catches every failure and wraps it in SmtpException, so retry must
+    // key on SmtpException (not MailSendException/MailConnectException, which
+    // never escape this method). Transient Render cold-start / SMTP connection
+    // stalls get 3 attempts: immediate, +5s, +10s. A permanent failure (bad
+    // address, auth) still retries but fails fast enough and surfaces the same
+    // error — acceptable for the low send volume here.
+    @Retryable(
+        retryFor = SmtpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 5000, multiplier = 2)
+    )
     public String send(String toEmail, String subject,
                        String bodyHtml, String bodyText,
                        String messageId, String unsubscribeUrl,
