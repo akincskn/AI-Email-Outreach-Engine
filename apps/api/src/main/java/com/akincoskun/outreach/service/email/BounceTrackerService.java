@@ -27,8 +27,12 @@ public class BounceTrackerService {
 
     @Value("${app.gmail.imap-host}")    private String imapHost;
     @Value("${app.gmail.imap-port}")    private int imapPort;
-    @Value("${spring.mail.username}")   private String username;
-    @Value("${spring.mail.password}")   private String password;
+    // IMAP credentials read straight from env (Brevo migration: spring.mail.* is
+    // commented out, so the old ${spring.mail.username} placeholder no longer
+    // resolves). These trackers build their own jakarta.mail Session — they never
+    // used the JavaMailSender bean, only these two values.
+    @Value("${MAIL_USERNAME:}")   private String username;
+    @Value("${MAIL_PASSWORD:}")   private String password;
 
     @Scheduled(fixedDelay = 300_000) // every 5 minutes
     public void pollBounces() {
