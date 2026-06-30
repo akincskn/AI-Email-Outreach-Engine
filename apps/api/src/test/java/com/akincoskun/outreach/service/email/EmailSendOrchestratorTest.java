@@ -28,7 +28,7 @@ class EmailSendOrchestratorTest {
 
     @Mock SuppressionService suppressionService;
     @Mock VolumeLimiterService volumeLimiter;
-    @Mock SmtpService smtpService;
+    @Mock MailSendService mailSendService;
     @Mock HmacTokenService hmacTokenService;
     @Mock EmailSendRepository emailSendRepository;
     @InjectMocks EmailSendOrchestrator orchestrator;
@@ -69,7 +69,7 @@ class EmailSendOrchestratorTest {
         EmailSend result = orchestrator.send(draft);
 
         assertThat(result.getStatus()).isEqualTo(SendStatus.SUPPRESSED);
-        verify(smtpService, never()).send(any(), any(), any(), any(), any(), any(), any());
+        verify(mailSendService, never()).send(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -88,7 +88,7 @@ class EmailSendOrchestratorTest {
     void successfulSendUpdatesSentStatus() {
         when(suppressionService.isSuppressed(anyString())).thenReturn(false);
         when(volumeLimiter.canSendNow()).thenReturn(true);
-        when(smtpService.send(any(), any(), any(), any(), any(), any(), any())).thenReturn("OK");
+        when(mailSendService.send(any(), any(), any(), any(), any(), any(), any())).thenReturn("OK");
 
         EmailSend result = orchestrator.send(draft);
 
@@ -108,13 +108,13 @@ class EmailSendOrchestratorTest {
         when(volumeLimiter.canSendNow()).thenReturn(true);
         when(hmacTokenService.generateToken("info@testcorp.com")).thenReturn("real-unsub-token");
         when(hmacTokenService.generateToken("pixel")).thenReturn("real-pixel-token");
-        when(smtpService.send(any(), any(), any(), any(), any(), any(), any())).thenReturn("OK");
+        when(mailSendService.send(any(), any(), any(), any(), any(), any(), any())).thenReturn("OK");
 
         orchestrator.send(draft);
 
         ArgumentCaptor<String> htmlCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> textCaptor = ArgumentCaptor.forClass(String.class);
-        verify(smtpService).send(any(), any(), htmlCaptor.capture(), textCaptor.capture(), any(), any(), any());
+        verify(mailSendService).send(any(), any(), htmlCaptor.capture(), textCaptor.capture(), any(), any(), any());
 
         assertThat(htmlCaptor.getValue()).doesNotContain("PLACEHOLDER");
         assertThat(htmlCaptor.getValue()).contains("real-unsub-token");
@@ -145,8 +145,8 @@ class EmailSendOrchestratorTest {
     void smtpFailureSetsFailedStatus() {
         when(suppressionService.isSuppressed(anyString())).thenReturn(false);
         when(volumeLimiter.canSendNow()).thenReturn(true);
-        when(smtpService.send(any(), any(), any(), any(), any(), any(), any()))
-            .thenThrow(new SmtpException("Connection refused", new RuntimeException()));
+        when(mailSendService.send(any(), any(), any(), any(), any(), any(), any()))
+            .thenThrow(new BrevoException("Connection refused", new RuntimeException()));
 
         EmailSend result = orchestrator.send(draft);
 

@@ -367,7 +367,7 @@ public class WriterService {
                                   String promptVersion, Map<String, Object> match) {
         Map<String, Object> result = parseJson(rawJson);
 
-        // Footer (signature + address + unsubscribe) is appended by SmtpService,
+        // Footer (signature + address + unsubscribe) is appended by MailSendService,
         // NOT the Writer — keeps it deterministic and avoids a duplicate footer.
         String bodyHtml = cleanAnchorText(convertMarkdownLinks((String) result.get("body_html")));
         String bodyText = result.get("body_text") != null ? (String) result.get("body_text") : "";

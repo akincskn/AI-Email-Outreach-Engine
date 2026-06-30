@@ -20,7 +20,7 @@ public class EmailSendOrchestrator {
 
     private final SuppressionService suppressionService;
     private final VolumeLimiterService volumeLimiter;
-    private final SmtpService smtpService;
+    private final MailSendService mailSendService;
     private final HmacTokenService hmacTokenService;
     private final EmailSendRepository emailSendRepository;
 
@@ -81,14 +81,14 @@ public class EmailSendOrchestrator {
         emailSendRepository.save(send);
 
         try {
-            // 3. SMTP send — replace PLACEHOLDER set by WriterService.injectFooter()
+            // 3. Mail send (Brevo HTTP API) — replace PLACEHOLDER set by WriterService.injectFooter()
             String subject = draft.getEditedSubject() != null ? draft.getEditedSubject() : draft.getSubject();
             String bodyHtml = (draft.getEditedBodyHtml() != null ? draft.getEditedBodyHtml() : draft.getBodyHtml())
                 .replace("/unsubscribe?token=PLACEHOLDER", unsubUrl);
             String bodyText = (draft.getEditedBodyText() != null ? draft.getEditedBodyText() : draft.getBodyText())
                 .replace("/unsubscribe?token=PLACEHOLDER", unsubUrl);
 
-            smtpService.send(toEmail, subject, bodyHtml, bodyText, messageId, unsubUrl, pixelUrl);
+            mailSendService.send(toEmail, subject, bodyHtml, bodyText, messageId, unsubUrl, pixelUrl);
 
             // 4. Record volume
             volumeLimiter.recordSend();
@@ -97,7 +97,10 @@ public class EmailSendOrchestrator {
             send.setStatus(SendStatus.SENT);
             send.setSentAt(Instant.now());
 
-        } catch (SmtpException e) {
+        } catch (BrevoException e) {
+            // FAILED legacy records from the Gmail SMTP era (before the Brevo
+            // migration) are left as-is here. Akın will decide retry/abandon for
+            // those; no automatic re-send is wired up.
             send.setStatus(SendStatus.FAILED);
             send.setErrorMessage(e.getMessage());
             send.setFailedAt(Instant.now());

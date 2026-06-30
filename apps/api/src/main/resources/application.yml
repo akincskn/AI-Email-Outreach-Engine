@@ -40,28 +40,33 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
-  mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    properties:
-      mail:
-        mime:
-          charset: UTF-8
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-            required: true
-          # Fail-fast instead of the default -1 (infinite) wait. Render free tier
-          # cold start to Gmail can take >15s; 30s tolerates the cold start while
-          # still surfacing a clear error on a genuine stall.
-          connectiontimeout: 30000
-          timeout: 30000
-          writetimeout: 30000
-        transport:
-          protocol: smtp
+  # ---------------------------------------------------------------------------
+  # LEGACY Gmail SMTP send config — DISABLED after Brevo migration.
+  # Render free tier blocks outbound SMTP ports (25/465/587) since Sept 2025, so
+  # JavaMailSender could never connect from prod. Outbound mail now goes through
+  # the Brevo HTTP API (port 443) — see the `brevo:` block below. Kept commented
+  # (not deleted) for a fast rollback if Brevo is ever swapped back out.
+  # NOTE: IMAP reply/bounce tracking still uses jakarta.mail (app.gmail.imap-*),
+  # which is unrelated to this outbound SMTP block.
+  # mail:
+  #   host: ${MAIL_HOST:smtp.gmail.com}
+  #   port: ${MAIL_PORT:587}
+  #   username: ${MAIL_USERNAME:}
+  #   password: ${MAIL_PASSWORD:}
+  #   properties:
+  #     mail:
+  #       mime:
+  #         charset: UTF-8
+  #       smtp:
+  #         auth: true
+  #         starttls:
+  #           enable: true
+  #           required: true
+  #         connectiontimeout: 30000
+  #         timeout: 30000
+  #         writetimeout: 30000
+  #       transport:
+  #         protocol: smtp
 
   jackson:
     serialization:
@@ -93,6 +98,14 @@ springdoc:
     path: /api-docs
   swagger-ui:
     path: /swagger-ui.html
+
+# Brevo Transactional Email API (outbound mail transport, replaces Gmail SMTP).
+# Free tier: 300 mails/day. Sends over HTTPS:443 → unblocked on Render free tier.
+brevo:
+  api-key: ${BREVO_API_KEY:}
+  sender-email: ${BREVO_SENDER_EMAIL:}
+  sender-name: ${BREVO_SENDER_NAME:Akın Coşkun}
+  timeout-seconds: ${BREVO_TIMEOUT_SECONDS:30}
 
 app:
   base-url: ${BASE_URL:http://localhost:8080}

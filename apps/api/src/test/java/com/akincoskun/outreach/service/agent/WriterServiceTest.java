@@ -65,7 +65,7 @@ class WriterServiceTest {
     }
 
     // Writer no longer emits any footer (signature/address/unsubscribe) — that is
-    // appended by SmtpService. The body is pure content.
+    // appended by MailSendService. The body is pure content.
     private String validDraftJson(String lang) {
         return """
             {

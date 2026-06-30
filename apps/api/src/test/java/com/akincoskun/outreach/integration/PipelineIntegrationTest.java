@@ -4,7 +4,7 @@ import com.akincoskun.outreach.domain.*;
 import com.akincoskun.outreach.exception.BusinessException;
 import com.akincoskun.outreach.repository.*;
 import com.akincoskun.outreach.service.email.EmailSendOrchestrator;
-import com.akincoskun.outreach.service.email.SmtpService;
+import com.akincoskun.outreach.service.email.MailSendService;
 import com.akincoskun.outreach.service.email.SuppressionService;
 import com.akincoskun.outreach.service.email.VolumeLimiterService;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +65,7 @@ class PipelineIntegrationTest {
     @Autowired EmailAccountRepository emailAccountRepository;
     @Autowired EmailDraftRepository emailDraftRepository;
 
-    @MockBean SmtpService smtpService;
+    @MockBean MailSendService mailSendService;
 
     private Company company;
     private EmailAccount account;
@@ -107,7 +107,7 @@ class PipelineIntegrationTest {
             .status(DraftStatus.PENDING)
             .build());
 
-        when(smtpService.send(any(), any(), any(), any(), any(), any(), any())).thenReturn("OK");
+        when(mailSendService.send(any(), any(), any(), any(), any(), any(), any())).thenReturn("OK");
     }
 
     // ── Suppression Flow ──────────────────────────────────────────────────────
@@ -119,7 +119,7 @@ class PipelineIntegrationTest {
         EmailSend result = orchestrator.send(draft);
 
         assertThat(result.getStatus()).isEqualTo(SendStatus.SUPPRESSED);
-        verify(smtpService, never()).send(any(), any(), any(), any(), any(), any(), any());
+        verify(mailSendService, never()).send(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
